@@ -44,7 +44,10 @@ export interface TrackingDataPayload {
   payment: {
     paymentStatus: string;
     hasSubmittedPayment: boolean;
+    paymentModeType?: string | null;
     paymentMethod?: string | null;
+    cashPaymentRefId?: string | null;
+    actualAmountReceived?: number | null;
     expectedAmount?: number | null;
     paidAmount?: number | null;
     utrNumber?: string | null;

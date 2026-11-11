@@ -2092,6 +2092,8 @@ export function resolveOrCreateStudentVendorAssignment(studentRaw = {}) {
   };
 }
 
+export const resolveActiveVendorForStudent = resolveOrCreateStudentVendorAssignment;
+
 export function syncWaitingStudentsForVendor(vendorId = null) {
   try {
     if (vendorId) {

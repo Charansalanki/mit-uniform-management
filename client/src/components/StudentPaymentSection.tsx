@@ -25,7 +25,10 @@ import {
   Store,
   Upload,
   Lock,
-  Printer
+  Printer,
+  Banknote,
+  ArrowRight,
+  ChevronRight
 } from 'lucide-react';
 import StudentUniformSlipModal from './student/StudentUniformSlipModal';
 import { StudentSlipData, printStudentSlip } from '../utils/studentSlipGenerator';
@@ -94,11 +97,22 @@ const METHOD_META: Record<PaymentMethodType, {
         Paytm
       </div>
     )
+  },
+  CASH: {
+    label: 'Direct Cash Payment',
+    badgeBg: '#fef3c7',
+    accentBorder: '#d97706',
+    logo: (
+      <div style={{ width: '38px', height: '38px', borderRadius: '8px', background: '#fffbeb', border: '1px solid #fde68a', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800, fontSize: '13px', boxShadow: '0 1px 3px rgba(0,0,0,0.06)', color: '#b45309' }}>
+        ₹
+      </div>
+    )
   }
 };
 
 const STATUS_STYLE: Record<PaymentStatus, { bg: string; text: string; border: string }> = {
   'Not Paid': { bg: '#f1f5f9', text: '#475569', border: '#cbd5e1' },
+  'Payment Pending': { bg: '#f1f5f9', text: '#475569', border: '#cbd5e1' },
   'Payment Submitted': { bg: '#fef3c7', text: '#92400e', border: '#fcd34d' },
   'Submitted': { bg: '#fef3c7', text: '#92400e', border: '#fcd34d' },
   'Under Verification': { bg: '#ffedd5', text: '#9a3412', border: '#fdba74' },
@@ -107,7 +121,10 @@ const STATUS_STYLE: Record<PaymentStatus, { bg: string; text: string; border: st
   'Payment Successful': { bg: '#dcfce7', text: '#166534', border: '#86efac' },
   'Payment Rejected': { bg: '#fee2e2', text: '#991b1b', border: '#fca5a5' },
   'Rejected': { bg: '#fee2e2', text: '#991b1b', border: '#fca5a5' },
-  'Payment Not Received': { bg: '#fee2e2', text: '#991b1b', border: '#fca5a5' }
+  'Payment Not Received': { bg: '#fee2e2', text: '#991b1b', border: '#fca5a5' },
+  'CASH PAYMENT PENDING': { bg: '#fef3c7', text: '#92400e', border: '#fcd34d' },
+  'CASH RECEIVED': { bg: '#dcfce7', text: '#166534', border: '#86efac' },
+  'CASH PAYMENT REJECTED': { bg: '#fee2e2', text: '#991b1b', border: '#fca5a5' }
 };
 
 export default function StudentPaymentSection({ registrationData }: Props) {
@@ -147,6 +164,12 @@ export default function StudentPaymentSection({ registrationData }: Props) {
   const [showSlipModal, setShowSlipModal] = useState(false);
   const [fetchedPin, setFetchedPin] = useState<string>('');
 
+  // Swiggy-style Checkout Selection state
+  const [checkoutMode, setCheckoutMode] = useState<'UPI' | 'CASH'>('UPI');
+  const [confirmedMode, setConfirmedMode] = useState<'UPI' | 'CASH' | null>(null);
+  const [cashSubmitting, setCashSubmitting] = useState(false);
+  const [cashPaymentRefId, setCashPaymentRefId] = useState<string>('');
+
   // 1. Resolve and normalize the registration ID once at the top of the component scope
   const rawRegistrationId =
     registrationData?.registrationId ||
@@ -160,7 +183,15 @@ export default function StudentPaymentSection({ registrationData }: Props) {
   const studentName = registrationData.studentName || registrationData.fullName || 'Student';
   const yearSemDisplay = registrationData.yearSemester || formatAcademicYear(registrationData.semester) || '1st Year';
 
-  const isVerified = (paymentStatus as string) === 'Payment Verified' || (paymentStatus as string) === 'Payment Successful' || (paymentStatus as string) === 'Verified';
+  const isVerified =
+    (paymentStatus as string) === 'Payment Verified' ||
+    (paymentStatus as string) === 'Payment Successful' ||
+    (paymentStatus as string) === 'Verified' ||
+    (paymentStatus as string) === 'CASH RECEIVED';
+
+  const isCashPending = paymentStatus === 'CASH PAYMENT PENDING';
+  const isCashReceived = paymentStatus === 'CASH RECEIVED';
+  const isCashRejected = paymentStatus === 'CASH PAYMENT REJECTED';
 
   // Uniform Fee is strictly vendor-based: only display the assigned vendor's configured price money.
   // If no vendor is assigned or vendor price is not configured, it must NOT show an amount (it must be blank).
@@ -222,8 +253,8 @@ export default function StudentPaymentSection({ registrationData }: Props) {
     vendorId: assignedVendor?.vendorId || 'N/A',
     isPaymentVerified: isVerified,
     paymentStatus,
-    paidAmount: submission?.amount ?? (assignedVendorFee || 0),
-    utrNumber: submission?.utrNumber ?? utrNumber ?? '',
+    paidAmount: submission?.actualAmountReceived ?? submission?.amount ?? (assignedVendorFee || 0),
+    utrNumber: submission?.utrNumber ?? submission?.cashPaymentRefId ?? cashPaymentRefId ?? utrNumber ?? (isCashReceived ? 'CASH PAYMENT' : ''),
     verifiedAt: submission?.verifiedAt ?? '',
     verifiedBy: assignedVendor?.vendorName ?? ''
   };
@@ -332,12 +363,82 @@ export default function StudentPaymentSection({ registrationData }: Props) {
         setPaymentStatus(data.paymentStatus || 'Not Paid');
         if (data.submission) {
           setSubmission(data.submission);
+          if (data.submission.cashPaymentRefId) {
+            setCashPaymentRefId(data.submission.cashPaymentRefId);
+          }
+        }
+        if (
+          data.paymentStatus === 'CASH PAYMENT PENDING' ||
+          data.paymentStatus === 'CASH RECEIVED' ||
+          data.paymentStatus === 'CASH PAYMENT REJECTED' ||
+          data.submission?.paymentMethod === 'CASH' ||
+          data.submission?.paymentModeType === 'CASH'
+        ) {
+          setCheckoutMode('CASH');
+          setConfirmedMode('CASH');
+        } else if (
+          data.paymentStatus === 'Payment Submitted' ||
+          data.paymentStatus === 'Under Verification' ||
+          data.paymentStatus === 'Payment Successful' ||
+          data.paymentStatus === 'Payment Verified'
+        ) {
+          setCheckoutMode('UPI');
+          setConfirmedMode('UPI');
         }
       }
     } catch (err) {
       console.warn('Error checking payment status:', err);
     }
-  }, [regId]);
+  }, [rawRegistrationId]);
+
+  const handleContinueCashPayment = async () => {
+    setErrorMsg('');
+    setSuccessBanner('');
+    const verifiedRegId = cleanRegId(rawRegistrationId);
+    if (!isValidRegistrationId(verifiedRegId)) {
+      setErrorMsg('Valid Student Registration ID is missing.');
+      return;
+    }
+
+    try {
+      setCashSubmitting(true);
+      const res = await api.requestCashPayment({
+        registrationId: verifiedRegId,
+        applicationId: cleanRegId((registrationData as any)?.applicationId || ''),
+        usn: (registrationData.usn || '').toUpperCase().trim(),
+        studentName: (registrationData.studentName || registrationData.fullName || studentName || '').trim(),
+        course: (registrationData as any)?.course || 'B.E.',
+        department: (registrationData as any)?.departmentShortName || registrationData.department || '',
+        academicYear: registrationData.academicYear || registrationData.yearSemester || yearSemDisplay,
+        section: registrationData.section || '',
+        gender: selectedGenderOverride || registrationData.gender || '',
+        packageType: registrationData.packageType || 'standard'
+      });
+
+      if (res.success) {
+        setCashPaymentRefId(res.cashPaymentRefId);
+        setPaymentStatus(res.paymentStatus);
+        setConfirmedMode('CASH');
+        setSuccessBanner(res.message);
+        if (res.assignedVendor) {
+          setAssignedVendor((prev: any) => ({
+            ...prev,
+            ...res.assignedVendor
+          }));
+        }
+      }
+    } catch (err: any) {
+      if (err.data?.alreadyPending) {
+        setCashPaymentRefId(err.data.cashPaymentRefId);
+        setPaymentStatus('CASH PAYMENT PENDING');
+        setConfirmedMode('CASH');
+      } else {
+        setErrorMsg(err.message || 'Failed to initiate cash payment request.');
+      }
+    } finally {
+      setCashSubmitting(false);
+    }
+  };
 
   // Real-Time SSE & Sync Polling hook for immediate system updates
   useRealtimeSystemSync({
@@ -457,7 +558,13 @@ export default function StudentPaymentSection({ registrationData }: Props) {
     }
   };
 
-  const canSubmitForm = paymentStatus === 'Not Paid' || paymentStatus === 'Payment Rejected' || paymentStatus === 'Rejected' || paymentStatus === 'Payment Not Received';
+  const canSubmitForm =
+    paymentStatus === 'Not Paid' ||
+    paymentStatus === 'Payment Pending' ||
+    paymentStatus === 'Payment Rejected' ||
+    paymentStatus === 'Rejected' ||
+    paymentStatus === 'Payment Not Received' ||
+    paymentStatus === 'CASH PAYMENT REJECTED';
   const currentStatusStyle = STATUS_STYLE[paymentStatus] || STATUS_STYLE['Not Paid'];
 
   return (
@@ -613,7 +720,11 @@ export default function StudentPaymentSection({ registrationData }: Props) {
               PAYMENT SUCCESSFUL
             </h3>
             <p style={{ margin: 0, fontSize: '13px', lineHeight: 1.6 }}>
-              Your uniform payment of <strong>₹{Number(submission?.bankVerifiedAmount || submission?.amount || assignedVendorFee || 0).toLocaleString('en-IN')}</strong> (UTR: <span style={{ fontFamily: 'monospace', fontWeight: 700 }}>{submission?.utrNumber}</span>) has been officially verified. Your uniform order has been sent to production!
+              Your uniform payment of <strong>₹{Number(submission?.actualAmountReceived || submission?.bankVerifiedAmount || submission?.amount || assignedVendorFee || 0).toLocaleString('en-IN')}</strong>
+              {submission?.paymentMethod === 'CASH'
+                ? <> (Cash Ref: <span style={{ fontFamily: 'monospace', fontWeight: 700 }}>{submission?.cashPaymentRefId || cashPaymentRefId}</span>)</>
+                : (submission?.utrNumber ? <> (UTR: <span style={{ fontFamily: 'monospace', fontWeight: 700 }}>{submission.utrNumber}</span>)</> : null)}
+              {' '}has been officially verified. Your uniform order has been sent to production!
             </p>
             <div style={{ display: 'flex', gap: '10px', marginTop: '14px', flexWrap: 'wrap' }}>
               <button
@@ -635,6 +746,133 @@ export default function StudentPaymentSection({ registrationData }: Props) {
                 }}
               >
                 <Download size={14} /> Download Verified Slip (1-Page A4)
+              </button>
+            </div>
+          </div>
+        )}
+
+        {isCashPending && (
+          <div style={{ background: '#fffbeb', border: '2px solid #fde047', borderRadius: '14px', padding: '20px 24px', color: '#78350f' }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '8px', marginBottom: '8px' }}>
+              <h3 style={{ fontSize: '17px', fontWeight: 800, margin: 0, display: 'flex', alignItems: 'center', gap: '8px', color: '#92400e' }}>
+                <Banknote size={20} color="#d97706" /> Cash Payment Selected · Pending Counter Collection
+              </h3>
+              <span style={{ fontSize: '11px', fontWeight: 800, padding: '3px 10px', borderRadius: '12px', background: '#fef3c7', color: '#92400e', border: '1px solid #fde047' }}>
+                CASH PAYMENT PENDING
+              </span>
+            </div>
+
+            <p style={{ margin: '0 0 14px 0', fontSize: '13px', lineHeight: 1.6, color: '#78350f' }}>
+              Cash payment selected. Please pay the amount directly to your assigned uniform vendor. Your payment will be confirmed after the vendor receives the cash.
+            </p>
+
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '12px', background: 'rgba(255,255,255,0.9)', padding: '14px', borderRadius: '10px', border: '1px solid #fde68a', fontSize: '12px', marginBottom: '14px' }}>
+              <div>
+                <span style={{ color: '#64748b', display: 'block', fontSize: '11px' }}>Cash Reference ID</span>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginTop: '2px' }}>
+                  <strong style={{ color: '#1d4ed8', fontFamily: 'monospace', fontSize: '14px' }}>
+                    {cashPaymentRefId || submission?.cashPaymentRefId || 'N/A'}
+                  </strong>
+                  {(cashPaymentRefId || submission?.cashPaymentRefId) && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const id = cashPaymentRefId || submission?.cashPaymentRefId || '';
+                        navigator.clipboard.writeText(id);
+                        setCopiedUtr(true);
+                        setTimeout(() => setCopiedUtr(false), 2000);
+                      }}
+                      style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '2px', color: '#2563eb' }}
+                      title="Copy Reference ID"
+                    >
+                      {copiedUtr ? <Check size={14} color="#16a34a" /> : <Copy size={14} />}
+                    </button>
+                  )}
+                </div>
+              </div>
+
+              <div>
+                <span style={{ color: '#64748b', display: 'block', fontSize: '11px' }}>Payable Amount</span>
+                <strong style={{ color: '#0f172a', fontSize: '14px' }}>
+                  ₹{Number(submission?.amount || submission?.expectedAmount || assignedVendorFee || 1500).toLocaleString('en-IN')}
+                </strong>
+              </div>
+
+              <div>
+                <span style={{ color: '#64748b', display: 'block', fontSize: '11px' }}>Assigned Vendor Desk</span>
+                <strong style={{ color: '#0f172a' }}>
+                  {assignedVendor?.vendorName || submission?.vendorName || 'Assigned Vendor'}
+                </strong>
+                <span style={{ fontSize: '11px', color: '#64748b', display: 'block' }}>
+                  📍 {assignedVendor?.collectionRoom || 'Main Distribution Hall'}
+                </span>
+              </div>
+            </div>
+
+            <div style={{ padding: '10px 14px', background: 'rgba(245, 158, 11, 0.12)', borderRadius: '8px', border: '1px solid rgba(245, 158, 11, 0.3)', fontSize: '12px', color: '#92400e', marginBottom: '12px' }}>
+              <strong>Counter Instructions:</strong> Visit the vendor counter on campus, quote your Cash Reference ID <strong>#{cashPaymentRefId || submission?.cashPaymentRefId}</strong>, and hand over the exact fee of ₹{Number(submission?.amount || submission?.expectedAmount || assignedVendorFee || 1500).toLocaleString('en-IN')}. Once the vendor confirms receipt on their terminal, your official Uniform Distribution Slip will unlock immediately.
+            </div>
+
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '8px' }}>
+              <div style={{ fontSize: '11.5px', color: '#92400e', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                <Lock size={13} /> Official Slip Locked: Will unlock as soon as vendor marks "Cash Received".
+              </div>
+
+              <button
+                type="button"
+                onClick={() => {
+                  setConfirmedMode('UPI');
+                  setCheckoutMode('UPI');
+                }}
+                style={{
+                  background: 'none',
+                  border: 'none',
+                  color: '#2563eb',
+                  fontSize: '12px',
+                  fontWeight: 800,
+                  cursor: 'pointer',
+                  textDecoration: 'underline'
+                }}
+              >
+                Changed your mind? Pay Online via UPI instead →
+              </button>
+            </div>
+          </div>
+        )}
+
+        {isCashRejected && (
+          <div style={{ background: '#fef2f2', border: '1.5px solid #fca5a5', borderRadius: '12px', padding: '18px 22px', color: '#7f1d1d' }}>
+            <h3 style={{ fontSize: '16px', fontWeight: 800, margin: '0 0 6px 0', display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <AlertCircle size={18} /> Cash Payment Request Rejected by Vendor
+            </h3>
+            <p style={{ margin: '0 0 8px 0', fontSize: '13px' }}>
+              Your cash payment request (Ref: <span style={{ fontFamily: 'monospace', fontWeight: 700 }}>{submission?.cashPaymentRefId || cashPaymentRefId}</span>) was rejected by the vendor.
+            </p>
+            {submission?.rejectionReason && (
+              <div style={{ background: 'rgba(255,255,255,0.7)', padding: '8px 12px', borderRadius: '6px', fontSize: '12px', color: '#991b1b', marginBottom: '12px', border: '1px solid #fecaca' }}>
+                <strong>Reason given:</strong> {submission.rejectionReason}
+              </div>
+            )}
+            <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
+              <button
+                type="button"
+                onClick={() => {
+                  setConfirmedMode(null);
+                  setCheckoutMode('CASH');
+                }}
+                style={{ padding: '8px 14px', borderRadius: '8px', background: '#16a34a', color: '#fff', fontSize: '12px', fontWeight: 800, border: 'none', cursor: 'pointer' }}
+              >
+                Re-request Cash Payment
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setConfirmedMode('UPI');
+                  setCheckoutMode('UPI');
+                }}
+                style={{ padding: '8px 14px', borderRadius: '8px', background: '#2563eb', color: '#fff', fontSize: '12px', fontWeight: 800, border: 'none', cursor: 'pointer' }}
+              >
+                Pay via Online UPI Instead
               </button>
             </div>
           </div>
@@ -782,13 +1020,203 @@ export default function StudentPaymentSection({ registrationData }: Props) {
         )}
 
         {/* ── Active Payment Flow (when student needs to pay / resubmit and collection is enabled) ── */}
-        {canSubmitForm && !noVendorAssigned && config?.isCollectionEnabled && (
+        {canSubmitForm && !noVendorAssigned && config?.isCollectionEnabled && !isCashPending && (
           <>
-            {/* 1. UPI Payment Option Cards */}
-            <div>
-              <label style={{ display: 'block', fontSize: '12px', fontWeight: 800, color: '#1e293b', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '10px' }}>
-                1. Select UPI Payment App
-              </label>
+            {confirmedMode !== 'UPI' ? (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                <div>
+                  <label style={{ display: 'block', fontSize: '13px', fontWeight: 800, color: '#0f172a', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                    Select Payment Method
+                  </label>
+                  <p style={{ margin: '4px 0 0 0', fontSize: '12.5px', color: '#64748b' }}>
+                    Choose your preferred payment method below. Both options route to your assigned uniform vendor ({assignedVendor?.vendorName}).
+                  </p>
+                </div>
+
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '14px' }}>
+                  {/* Option 1: UPI */}
+                  <div
+                    onClick={() => setCheckoutMode('UPI')}
+                    style={{
+                      padding: '18px 20px',
+                      borderRadius: '14px',
+                      cursor: 'pointer',
+                      border: checkoutMode === 'UPI' ? '2.5px solid #2563eb' : '1.5px solid #cbd5e1',
+                      background: checkoutMode === 'UPI' ? '#eff6ff' : '#ffffff',
+                      boxShadow: checkoutMode === 'UPI' ? '0 4px 14px rgba(37, 99, 235, 0.12)' : '0 1px 3px rgba(0,0,0,0.03)',
+                      transition: 'all 0.15s ease',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      justifyContent: 'space-between',
+                      position: 'relative'
+                    }}
+                  >
+                    <div>
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '10px' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                          <span style={{ padding: '6px', borderRadius: '8px', background: '#dbeafe', color: '#1d4ed8' }}>
+                            <QrCode size={20} />
+                          </span>
+                          <span style={{ fontSize: '15px', fontWeight: 800, color: '#0f172a' }}>
+                            Online UPI Payment
+                          </span>
+                        </div>
+
+                        <div
+                          style={{
+                            width: '20px',
+                            height: '20px',
+                            borderRadius: '50%',
+                            border: checkoutMode === 'UPI' ? '2px solid #2563eb' : '2px solid #cbd5e1',
+                            background: checkoutMode === 'UPI' ? '#2563eb' : '#ffffff',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center'
+                          }}
+                        >
+                          {checkoutMode === 'UPI' && <span style={{ width: '8px', height: '8px', borderRadius: '50%', background: '#fff' }} />}
+                        </div>
+                      </div>
+
+                      <p style={{ margin: '0 0 12px 0', fontSize: '12.5px', color: '#64748b', lineHeight: 1.5 }}>
+                        Pay instantly via Google Pay, PhonePe, or Paytm. Scan vendor QR code, enter your 12-digit UTR, and upload screenshot.
+                      </p>
+                    </div>
+
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', paddingTop: '10px', borderTop: '1px solid rgba(0,0,0,0.05)' }}>
+                      <span style={{ fontSize: '11px', fontWeight: 700, color: '#2563eb', background: '#dbeafe', padding: '2px 8px', borderRadius: '4px' }}>Instant Online</span>
+                      <span style={{ fontSize: '11px', color: '#64748b' }}>GPay · PhonePe · Paytm</span>
+                    </div>
+                  </div>
+
+                  {/* Option 2: Cash */}
+                  <div
+                    onClick={() => setCheckoutMode('CASH')}
+                    style={{
+                      padding: '18px 20px',
+                      borderRadius: '14px',
+                      cursor: 'pointer',
+                      border: checkoutMode === 'CASH' ? '2.5px solid #16a34a' : '1.5px solid #cbd5e1',
+                      background: checkoutMode === 'CASH' ? '#f0fdf4' : '#ffffff',
+                      boxShadow: checkoutMode === 'CASH' ? '0 4px 14px rgba(22, 163, 74, 0.12)' : '0 1px 3px rgba(0,0,0,0.03)',
+                      transition: 'all 0.15s ease',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      justifyContent: 'space-between',
+                      position: 'relative'
+                    }}
+                  >
+                    <div>
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '10px' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                          <span style={{ padding: '6px', borderRadius: '8px', background: '#dcfce7', color: '#15803d' }}>
+                            <Banknote size={20} />
+                          </span>
+                          <span style={{ fontSize: '15px', fontWeight: 800, color: '#0f172a' }}>
+                            Cash Payment (Pay at Desk)
+                          </span>
+                        </div>
+
+                        <div
+                          style={{
+                            width: '20px',
+                            height: '20px',
+                            borderRadius: '50%',
+                            border: checkoutMode === 'CASH' ? '2px solid #16a34a' : '2px solid #cbd5e1',
+                            background: checkoutMode === 'CASH' ? '#16a34a' : '#ffffff',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center'
+                          }}
+                        >
+                          {checkoutMode === 'CASH' && <span style={{ width: '8px', height: '8px', borderRadius: '50%', background: '#fff' }} />}
+                        </div>
+                      </div>
+
+                      <p style={{ margin: '0 0 12px 0', fontSize: '12.5px', color: '#64748b', lineHeight: 1.5 }}>
+                        Generate your unique Cash Reference ID and pay ₹{assignedVendorFee ? assignedVendorFee.toLocaleString('en-IN') : '1,500'} directly in cash at your assigned vendor counter on campus.
+                      </p>
+                    </div>
+
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', paddingTop: '10px', borderTop: '1px solid rgba(0,0,0,0.05)' }}>
+                      <span style={{ fontSize: '11px', fontWeight: 700, color: '#16a34a', background: '#dcfce7', padding: '2px 8px', borderRadius: '4px' }}>Counter Payment</span>
+                      <span style={{ fontSize: '11px', color: '#64748b' }}>No QR scan or UTR needed</span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Continue CTA Button */}
+                <div style={{ marginTop: '4px' }}>
+                  {checkoutMode === 'UPI' ? (
+                    <button
+                      type="button"
+                      onClick={() => setConfirmedMode('UPI')}
+                      style={{
+                        width: '100%',
+                        padding: '13px 20px',
+                        background: '#2563eb',
+                        color: '#ffffff',
+                        borderRadius: '10px',
+                        fontWeight: 800,
+                        fontSize: '14px',
+                        border: 'none',
+                        cursor: 'pointer',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        gap: '8px',
+                        boxShadow: '0 2px 8px rgba(37,99,235,0.25)'
+                      }}
+                    >
+                      <span>Continue with Online UPI Payment</span>
+                      <ArrowRight size={16} />
+                    </button>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={handleContinueCashPayment}
+                      disabled={cashSubmitting}
+                      style={{
+                        width: '100%',
+                        padding: '13px 20px',
+                        background: '#16a34a',
+                        color: '#ffffff',
+                        borderRadius: '10px',
+                        fontWeight: 800,
+                        fontSize: '14px',
+                        border: 'none',
+                        cursor: 'pointer',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        gap: '8px',
+                        boxShadow: '0 2px 8px rgba(22,163,74,0.25)',
+                        opacity: cashSubmitting ? 0.6 : 1
+                      }}
+                    >
+                      <span>{cashSubmitting ? 'Generating Cash Reference ID...' : 'Continue with Cash Payment'}</span>
+                      <ArrowRight size={16} />
+                    </button>
+                  )}
+                </div>
+              </div>
+            ) : (
+              <>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '6px' }}>
+                  <button
+                    type="button"
+                    onClick={() => setConfirmedMode(null)}
+                    style={{ background: 'none', border: 'none', color: '#2563eb', fontSize: '12.5px', fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px', padding: 0 }}
+                  >
+                    ← Switch payment method (Pay Cash at Vendor Desk)
+                  </button>
+                </div>
+
+                {/* 1. UPI Payment Option Cards */}
+                <div>
+                  <label style={{ display: 'block', fontSize: '12px', fontWeight: 800, color: '#1e293b', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '10px' }}>
+                    1. Select UPI Payment App
+                  </label>
 
               {loadingConfig ? (
                 <div style={{ padding: '28px', textAlign: 'center', color: '#64748b', background: '#f8fafc', borderRadius: '10px', border: '1px solid #e2e8f0', fontSize: '13px' }}>
@@ -1044,6 +1472,8 @@ export default function StudentPaymentSection({ registrationData }: Props) {
                 </div>
               </div>
             )}
+            </>
+          )}
           </>
         )}
       </div>

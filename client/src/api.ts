@@ -493,6 +493,159 @@ export const api = {
     return data;
   },
 
+  async requestCashPayment(payload: {
+    registrationId: string;
+    applicationId?: string;
+    usn: string;
+    studentName?: string;
+    course?: string;
+    department?: string;
+    academicYear?: string;
+    section?: string;
+    gender?: string;
+    packageType?: string;
+  }): Promise<{
+    success: boolean;
+    message: string;
+    cashPaymentRefId: string;
+    paymentStatus: PaymentStatus;
+    expectedAmount: number;
+    assignedVendor?: {
+      vendorId: string;
+      vendorName: string;
+      allocationId: string;
+      collectionRoom?: string;
+    };
+    alreadyConfirmed?: boolean;
+    alreadyPending?: boolean;
+  }> {
+    const res = await fetch(`${API_BASE}/payments/cash/request`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok || !data.success) {
+      const err: any = new Error(data.message || 'Cash payment request failed.');
+      err.data = data;
+      throw err;
+    }
+    return data;
+  },
+
+  async getVendorCashPayments(
+    token: string,
+    params?: { status?: string; search?: string }
+  ): Promise<{
+    success: boolean;
+    summary: {
+      totalRequests: number;
+      pendingCount: number;
+      receivedCount: number;
+      rejectedCount: number;
+      totalCashCollected: number;
+    };
+    requests: any[];
+  }> {
+    const searchParams = new URLSearchParams();
+    if (params?.status) searchParams.set('status', params.status);
+    if (params?.search) searchParams.set('search', params.search);
+    const queryStr = searchParams.toString() ? `?${searchParams.toString()}` : '';
+
+    const res = await fetch(`${API_BASE}/vendor-portal/cash-payments${queryStr}`, {
+      headers: { Authorization: `Bearer ${token}` }
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok || !data.success) {
+      throw new Error(data.message || 'Failed to fetch vendor cash payments.');
+    }
+    return data;
+  },
+
+  async confirmVendorCashPayment(
+    submissionId: string,
+    token: string,
+    actualAmountReceived: number,
+    remarks?: string
+  ): Promise<{ success: boolean; message: string; submission: any }> {
+    const res = await fetch(`${API_BASE}/vendor-portal/cash-payments/${submissionId}/confirm`, {
+      method: 'PATCH',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${token}`
+      },
+      body: JSON.stringify({ actualAmountReceived, remarks })
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok || !data.success) {
+      const err: any = new Error(data.message || 'Failed to confirm cash payment.');
+      err.amountMismatch = Boolean(data.amountMismatch);
+      throw err;
+    }
+    return data;
+  },
+
+  async rejectVendorCashPayment(
+    submissionId: string,
+    token: string,
+    rejectionReason: string,
+    remarks?: string
+  ): Promise<{ success: boolean; message: string; submission: any }> {
+    const res = await fetch(`${API_BASE}/vendor-portal/cash-payments/${submissionId}/reject`, {
+      method: 'PATCH',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${token}`
+      },
+      body: JSON.stringify({ rejectionReason, remarks })
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok || !data.success) {
+      throw new Error(data.message || 'Failed to reject cash payment.');
+    }
+    return data;
+  },
+
+  async getAdminCashPayments(params?: {
+    status?: string;
+    vendorId?: string;
+    search?: string;
+  }): Promise<{
+    success: boolean;
+    metrics: {
+      totalCashRequests: number;
+      pendingCashRequests: number;
+      confirmedCashReceived: number;
+      rejectedCashRequests: number;
+      totalCashRevenueCollected: number;
+      pendingCashAmount: number;
+    };
+    financialBreakdown: {
+      upiRevenue: number;
+      cashRevenue: number;
+      totalCollectedRevenue: number;
+      pendingCashAmount: number;
+      verifiedUpiCount: number;
+      confirmedCashCount: number;
+    };
+    submissions: any[];
+  }> {
+    const searchParams = new URLSearchParams();
+    if (params?.status) searchParams.set('status', params.status);
+    if (params?.vendorId) searchParams.set('vendorId', params.vendorId);
+    if (params?.search) searchParams.set('search', params.search);
+    const queryStr = searchParams.toString() ? `?${searchParams.toString()}` : '';
+
+    const res = await fetch(`${API_BASE}/admin/payments/cash${queryStr}`, {
+      headers: getAuthHeaders()
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok || !data.success) {
+      throw new Error(data.message || 'Failed to fetch admin cash payments data.');
+    }
+    return data;
+  },
+
   async getAdminPaymentConfig(): Promise<{ success: boolean; stats: PaymentStats; config: PaymentConfig; scanners: PaymentMethod[]; history: PaymentConfigHistory[] }> {
     const res = await fetch(`${API_BASE}/admin/payments/config`, { headers: getAuthHeaders() });
     if (!res.ok) throw new Error('Failed to load admin payment config.');

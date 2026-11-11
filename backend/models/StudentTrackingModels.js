@@ -59,7 +59,10 @@ const StudentTrackingRecordSchema = new mongoose.Schema({
       'Payment Submitted',  // Student submitted UTR & screenshot, awaiting vendor check
       'Under Verification',
       'Payment Successful', // Verified by Vendor / Admin
-      'Payment Rejected'    // Rejected by Vendor / Admin (can retry payment)
+      'Payment Rejected',   // Rejected by Vendor / Admin (can retry payment)
+      'CASH PAYMENT PENDING',
+      'CASH RECEIVED',
+      'CASH PAYMENT REJECTED'
     ],
     default: 'Payment Pending',
     index: true

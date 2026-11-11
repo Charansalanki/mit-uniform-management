@@ -17,6 +17,7 @@ import {
 } from './db.js';
 import { appCache } from './cache.js';
 import paymentRoutes from './paymentRoutes.js';
+import cashPaymentRoutes from './cashPaymentRoutes.js';
 import vendorRoutes from './vendorRoutes.js';
 import vendorPortalRoutes from './vendorPortalRoutes.js';
 import studentTrackingRoutes from './studentTrackingRoutes.js';
@@ -77,6 +78,7 @@ app.use(
 // Mount Direct UPI Payment & Admin Payment Controller APIs
 app.use('/api', adminAuthRoutes);
 app.use('/api', paymentRoutes);
+app.use('/api', cashPaymentRoutes);
 app.use('/api', vendorRoutes);
 app.use('/api', vendorPortalRoutes);
 app.use('/api', studentTrackingRoutes);

@@ -199,11 +199,21 @@ const VendorAuditLogSchema = new mongoose.Schema({
   timestamp: { type: Date, default: Date.now }
 });
 
+// 6. System Sync State
+const SystemSyncStateSchema = new mongoose.Schema({
+  _id: { type: String, default: 'MIT_GLOBAL_SYNC_STATE' },
+  syncVersion: { type: Number, default: 1 },
+  lastEvent: { type: String, default: 'INIT' },
+  lastModifiedEntityId: { type: String, default: '' },
+  updatedAt: { type: Date, default: Date.now }
+});
+
 module.exports = {
   Vendor: mongoose.models?.Vendor || mongoose.model('Vendor', VendorSchema),
   VendorAllocation: mongoose.models?.VendorAllocation || mongoose.model('VendorAllocation', VendorAllocationSchema),
   VendorPaymentConfiguration: mongoose.models?.VendorPaymentConfiguration || mongoose.model('VendorPaymentConfiguration', VendorPaymentConfigurationSchema),
   StudentVendorAssignment: mongoose.models?.StudentVendorAssignment || mongoose.model('StudentVendorAssignment', StudentVendorAssignmentSchema),
-  VendorAuditLog: mongoose.models?.VendorAuditLog || mongoose.model('VendorAuditLog', VendorAuditLogSchema)
+  VendorAuditLog: mongoose.models?.VendorAuditLog || mongoose.model('VendorAuditLog', VendorAuditLogSchema),
+  SystemSyncState: mongoose.models?.SystemSyncState || mongoose.model('SystemSyncState', SystemSyncStateSchema)
 };
 

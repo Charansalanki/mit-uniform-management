@@ -127,12 +127,22 @@ const generateSixDigitPin = () => {
 
 // Helper: Map database statuses cleanly for Student & Admin views
 export const resolveUnifiedPaymentStatus = (submission, trackingRecord) => {
+  if (typeof submission === 'string') {
+    submission = { payment_status: submission };
+  }
   if (!submission) {
+    const fallback = trackingRecord?.payment_status || trackingRecord?.paymentStatus || 'Payment Pending';
+    if (fallback === 'CASH PAYMENT PENDING' || fallback === 'CASH RECEIVED' || fallback === 'CASH PAYMENT REJECTED') {
+      return fallback;
+    }
     return trackingRecord?.payment_status === 'Payment Successful' || trackingRecord?.paymentStatus === 'Payment Successful'
       ? 'Payment Successful'
-      : (trackingRecord?.payment_status || trackingRecord?.paymentStatus || 'Payment Pending');
+      : fallback;
   }
   const st = submission.payment_status || submission.paymentStatus;
+  if (st === 'CASH PAYMENT PENDING' || st === 'CASH RECEIVED' || st === 'CASH PAYMENT REJECTED') {
+    return st;
+  }
   if (st === 'Verified' || st === 'Payment Verified' || st === 'Payment Successful') {
     return 'Payment Successful';
   }
@@ -148,8 +158,11 @@ export const resolveUnifiedPaymentStatus = (submission, trackingRecord) => {
   return 'Payment Pending';
 };
 
-// Normalize any DB payment status into the 5 required Student Live Statuses
-const normalizeStudentPaymentStatus = (rawStatus) => {
+// Normalize any DB payment status into the required Student Live Statuses
+export const normalizeStudentPaymentStatus = (rawStatus) => {
+  if (rawStatus === 'CASH PAYMENT PENDING' || rawStatus === 'CASH RECEIVED' || rawStatus === 'CASH PAYMENT REJECTED') {
+    return rawStatus;
+  }
   return resolveUnifiedPaymentStatus({ payment_status: rawStatus });
 };
 
@@ -190,6 +203,10 @@ const buildTrackingStatusPayload = (trackingRecord, includePinForOwner = false) 
     ? JSON.parse(trackingRecord.assigned_vendor)
     : (trackingRecord.assigned_vendor || {});
 
+  const isCashPayment = submission?.payment_method === 'CASH' ||
+    submission?.payment_mode_type === 'CASH' ||
+    livePaymentStatus.includes('CASH');
+
   const payload = {
     applicationId: trackingRecord.application_id,
     registrationId: trackingRecord.registration_id,
@@ -198,30 +215,35 @@ const buildTrackingStatusPayload = (trackingRecord, includePinForOwner = false) 
     isPaymentLocked:
       livePaymentStatus === 'Payment Submitted' ||
       livePaymentStatus === 'Under Verification' ||
-      livePaymentStatus === 'Payment Successful',
+      livePaymentStatus === 'Payment Successful' ||
+      livePaymentStatus === 'CASH PAYMENT PENDING' ||
+      livePaymentStatus === 'CASH RECEIVED',
     studentProfile: profile,
     uniformSelection: uniformSel,
     assignedVendor: assignedVnd,
     registeredAt: trackingRecord.created_at,
     payment: {
       paymentStatus: livePaymentStatus,
+      paymentModeType: isCashPayment ? 'CASH' : 'UPI',
       hasSubmittedPayment: Boolean(submission),
-      paymentMethod: submission?.payment_method || null,
+      paymentMethod: submission?.payment_method || (isCashPayment ? 'CASH' : null),
+      cashPaymentRefId: submission?.cash_payment_ref_id || null,
+      actualAmountReceived: submission?.actual_amount_received !== null && submission?.actual_amount_received !== undefined ? Number(submission.actual_amount_received) : null,
       expectedAmount: submission?.expected_amount || null,
-      paidAmount: submission?.bank_verified_amount || submission?.amount || null,
+      paidAmount: submission?.actual_amount_received || submission?.bank_verified_amount || submission?.amount || null,
       utrNumber: submission?.utr_number || null,
       paymentScreenshot: submission?.payment_screenshot || null,
       submittedAt: submission?.created_at || null,
       verifiedAt:
-        livePaymentStatus === 'Payment Successful' ? submission?.verified_at : null,
+        (livePaymentStatus === 'Payment Successful' || livePaymentStatus === 'CASH RECEIVED') ? submission?.verified_at : null,
       rejectedAt:
-        livePaymentStatus === 'Payment Rejected' ? (submission?.verified_at || submission?.updated_at) : null,
+        (livePaymentStatus === 'Payment Rejected' || livePaymentStatus === 'CASH PAYMENT REJECTED') ? (submission?.verified_at || submission?.updated_at) : null,
       verifiedByVendor: submission?.verified_by || assignedVnd?.vendorName || null,
       rejectionReason:
-        livePaymentStatus === 'Payment Rejected'
+        (livePaymentStatus === 'Payment Rejected' || livePaymentStatus === 'CASH PAYMENT REJECTED')
           ? (submission?.rejection_reason ||
              submission?.admin_remarks ||
-             'Payment could not be verified in the designated bank statement.')
+             (isCashPayment ? 'Cash payment request rejected by vendor.' : 'Payment could not be verified in the designated bank statement.'))
           : null
     }
   };

@@ -15,7 +15,10 @@ import {
   FileText,
   Lock,
   Download,
-  Printer
+  Printer,
+  Banknote,
+  Copy,
+  Check
 } from 'lucide-react';
 import { TrackingDataPayload } from '../../hooks/useStudentProgressPersistence';
 import { useAuthenticatedSse } from '../../hooks/useAuthenticatedSse';
@@ -53,6 +56,21 @@ const LIVE_STATUS_STYLES: Record<string, {
     icon: <CheckCircle2 size={20} color="#059669" />
   },
   'Payment Rejected': {
+    badge: { bg: '#dc2626', text: '#ffffff', border: '#dc2626' },
+    banner: { bg: '#fef2f2', border: '#f87171', text: '#7f1d1d', subText: '#991b1b' },
+    icon: <XCircle size={20} color="#dc2626" />
+  },
+  'CASH PAYMENT PENDING': {
+    badge: { bg: '#fef3c7', text: '#92400e', border: '#fde047' },
+    banner: { bg: '#fffbeb', border: '#fde047', text: '#78350f', subText: '#92400e' },
+    icon: <Banknote size={20} color="#d97706" />
+  },
+  'CASH RECEIVED': {
+    badge: { bg: '#059669', text: '#ffffff', border: '#059669' },
+    banner: { bg: '#ecfdf5', border: '#10b981', text: '#064e3b', subText: '#065f46' },
+    icon: <CheckCircle2 size={20} color="#059669" />
+  },
+  'CASH PAYMENT REJECTED': {
     badge: { bg: '#dc2626', text: '#ffffff', border: '#dc2626' },
     banner: { bg: '#fef2f2', border: '#f87171', text: '#7f1d1d', subText: '#991b1b' },
     icon: <XCircle size={20} color="#dc2626" />
@@ -161,11 +179,23 @@ export default function CheckPaymentStatusPortal({ apiBaseUrl = '', onBackToHome
   }, [viewToken, trackingData?.registrationId, fetchLatestFromDatabase]);
 
   const [showSlipModal, setShowSlipModal] = useState(false);
+  const [copiedRefId, setCopiedRefId] = useState(false);
 
   const payment = trackingData?.payment || { paymentStatus: 'Not Paid', hasSubmittedPayment: false };
   const currentStatus = payment.paymentStatus || 'Not Paid';
   const statusStyle = LIVE_STATUS_STYLES[currentStatus] || LIVE_STATUS_STYLES['Not Paid'];
-  const isVerified = currentStatus === 'Payment Successful' || currentStatus === 'Verified' || currentStatus === 'Payment Verified';
+  const isVerified =
+    currentStatus === 'Payment Successful' ||
+    currentStatus === 'Verified' ||
+    currentStatus === 'Payment Verified' ||
+    currentStatus === 'CASH RECEIVED';
+
+  const handleCopyRefId = (text: string) => {
+    if (!text) return;
+    navigator.clipboard.writeText(text);
+    setCopiedRefId(true);
+    setTimeout(() => setCopiedRefId(false), 2000);
+  };
 
   const slipData: StudentSlipData | null = trackingData
     ? {
@@ -186,8 +216,8 @@ export default function CheckPaymentStatusPortal({ apiBaseUrl = '', onBackToHome
         vendorId: trackingData.assignedVendor?.vendorId || 'N/A',
         isPaymentVerified: isVerified,
         paymentStatus: currentStatus,
-        paidAmount: payment.paidAmount ?? payment.expectedAmount ?? 0,
-        utrNumber: payment.utrNumber ?? '',
+        paidAmount: payment.actualAmountReceived ?? payment.paidAmount ?? payment.expectedAmount ?? 0,
+        utrNumber: payment.utrNumber ?? payment.cashPaymentRefId ?? (currentStatus === 'CASH RECEIVED' ? 'CASH PAYMENT' : ''),
         verifiedAt: payment.verifiedAt ?? '',
         verifiedBy: payment.verifiedByVendor ?? trackingData.assignedVendor?.vendorName ?? ''
       }
@@ -519,7 +549,7 @@ export default function CheckPaymentStatusPortal({ apiBaseUrl = '', onBackToHome
               </div>
 
               {/* Verified Details */}
-              {currentStatus === 'Payment Successful' && (
+              {(currentStatus === 'Payment Successful' || currentStatus === 'Verified' || currentStatus === 'Payment Verified') && (
                 <>
                   <div
                     style={{
@@ -598,6 +628,206 @@ export default function CheckPaymentStatusPortal({ apiBaseUrl = '', onBackToHome
                     </button>
                   </div>
                 </>
+              )}
+
+              {/* Cash Received Verified Details */}
+              {currentStatus === 'CASH RECEIVED' && (
+                <>
+                  <div
+                    style={{
+                      marginTop: '16px',
+                      paddingTop: '14px',
+                      borderTop: '1px solid rgba(16, 185, 129, 0.3)',
+                      display: 'grid',
+                      gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
+                      gap: '12px',
+                      fontSize: '12px'
+                    }}
+                  >
+                    <div>
+                      <span style={{ opacity: 0.75, display: 'block' }}>Cash Receipt Date & Time</span>
+                      <strong style={{ fontFamily: 'monospace', fontSize: '13px' }}>
+                        {payment.verifiedAt
+                          ? new Date(payment.verifiedAt).toLocaleString('en-IN')
+                          : 'Confirmed'}
+                      </strong>
+                    </div>
+                    <div>
+                      <span style={{ opacity: 0.75, display: 'block' }}>Cash Amount & Ref ID</span>
+                      <strong>
+                        ₹{Number(payment.actualAmountReceived || payment.paidAmount || payment.expectedAmount || 0).toLocaleString('en-IN')} • Ref:{' '}
+                        <span style={{ fontFamily: 'monospace' }}>{payment.cashPaymentRefId || 'Confirmed'}</span>
+                      </strong>
+                    </div>
+                    <div>
+                      <span style={{ opacity: 0.75, display: 'block' }}>Verified By Uniform Vendor</span>
+                      <strong>{payment.verifiedByVendor || trackingData.assignedVendor?.vendorName || 'Assigned Uniform Vendor'}</strong>
+                    </div>
+                  </div>
+
+                  <div style={{ marginTop: '12px', padding: '10px 14px', background: '#ecfdf5', border: '1px solid #a7f3d0', borderRadius: '8px', fontSize: '12px', color: '#065f46' }}>
+                    ✓ <strong>Cash Payment Verified:</strong> Full amount received and confirmed at the campus uniform desk. Your uniform sizes have been submitted for processing.
+                  </div>
+
+                  {/* Single-Page Official Verified Slip Action Buttons */}
+                  <div style={{ display: 'flex', gap: '10px', marginTop: '16px', flexWrap: 'wrap' }}>
+                    <button
+                      type="button"
+                      onClick={() => setShowSlipModal(true)}
+                      style={{
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '8px',
+                        padding: '10px 18px',
+                        background: '#16a34a',
+                        color: '#ffffff',
+                        border: 'none',
+                        borderRadius: '8px',
+                        fontSize: '13px',
+                        fontWeight: 800,
+                        cursor: 'pointer',
+                        boxShadow: '0 4px 12px rgba(22, 163, 74, 0.25)',
+                        transition: 'background 0.15s ease'
+                      }}
+                    >
+                      <Download size={15} /> Download Official Verified Slip (1-Page A4)
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => slipData && printStudentSlip(slipData)}
+                      style={{
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '8px',
+                        padding: '10px 16px',
+                        background: '#0f172a',
+                        color: '#ffffff',
+                        border: 'none',
+                        borderRadius: '8px',
+                        fontSize: '13px',
+                        fontWeight: 700,
+                        cursor: 'pointer'
+                      }}
+                    >
+                      <Printer size={15} /> Print / Save PDF
+                    </button>
+                  </div>
+                </>
+              )}
+
+              {/* Cash Payment Pending Details */}
+              {currentStatus === 'CASH PAYMENT PENDING' && (
+                <div style={{ marginTop: '14px', padding: '16px', background: '#fffbeb', border: '1.5px solid #fde047', borderRadius: '12px' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '12px' }}>
+                    <Banknote size={22} color="#b45309" />
+                    <div>
+                      <div style={{ fontSize: '14px', fontWeight: 800, color: '#78350f' }}>
+                        Direct Cash Payment Request Active
+                      </div>
+                      <div style={{ fontSize: '12px', color: '#92400e' }}>
+                        Please visit the campus uniform distribution counter to pay the fee in cash.
+                      </div>
+                    </div>
+                  </div>
+
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '12px', background: '#ffffff', padding: '14px', borderRadius: '8px', border: '1px solid #fed7aa', marginBottom: '14px' }}>
+                    <div>
+                      <span style={{ fontSize: '11px', fontWeight: 800, color: '#9a3412', textTransform: 'uppercase', display: 'block' }}>
+                        Cash Reference ID (Quote at Counter)
+                      </span>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '4px' }}>
+                        <strong style={{ fontFamily: 'monospace', fontSize: '15px', color: '#c2410c' }}>
+                          {payment.cashPaymentRefId || 'Pending'}
+                        </strong>
+                        {payment.cashPaymentRefId && (
+                          <button
+                            type="button"
+                            onClick={() => handleCopyRefId(payment.cashPaymentRefId || '')}
+                            style={{
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: '4px',
+                              padding: '3px 8px',
+                              borderRadius: '4px',
+                              border: '1px solid #cbd5e1',
+                              background: '#f8fafc',
+                              fontSize: '11px',
+                              fontWeight: 700,
+                              cursor: 'pointer'
+                            }}
+                          >
+                            {copiedRefId ? <Check size={12} color="#16a34a" /> : <Copy size={12} />}
+                            {copiedRefId ? 'Copied' : 'Copy'}
+                          </button>
+                        )}
+                      </div>
+                    </div>
+
+                    <div>
+                      <span style={{ fontSize: '11px', fontWeight: 800, color: '#9a3412', textTransform: 'uppercase', display: 'block' }}>
+                        Exact Amount to Pay in Cash
+                      </span>
+                      <div style={{ fontSize: '18px', fontWeight: 900, color: '#0f172a', marginTop: '2px' }}>
+                        ₹{Number(payment.expectedAmount || 0).toLocaleString('en-IN')}
+                      </div>
+                    </div>
+
+                    <div>
+                      <span style={{ fontSize: '11px', fontWeight: 800, color: '#9a3412', textTransform: 'uppercase', display: 'block' }}>
+                        Assigned Vendor / Counter
+                      </span>
+                      <div style={{ fontSize: '13px', fontWeight: 700, color: '#334155', marginTop: '2px' }}>
+                        {trackingData.assignedVendor?.vendorName || 'Uniform Office Counter'}
+                      </div>
+                    </div>
+                  </div>
+
+                  <div style={{ fontSize: '12px', color: '#78350f', lineHeight: 1.5, marginBottom: '12px' }}>
+                    <strong>Next Steps:</strong>
+                    <ol style={{ margin: '6px 0 0 18px', padding: 0 }}>
+                      <li>Visit the Uniform Counter on campus with your <strong>Reference ID</strong>.</li>
+                      <li>Pay <strong>₹{Number(payment.expectedAmount || 0).toLocaleString('en-IN')}</strong> in cash to the authorized uniform vendor.</li>
+                      <li>The vendor confirms your receipt on the portal, unlocking your verified receipt instantly.</li>
+                    </ol>
+                  </div>
+
+                  <div style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', color: '#b45309', fontWeight: 700, fontSize: '11.5px' }}>
+                    <Lock size={13} /> Official Verified Slip is locked until the vendor marks cash received.
+                  </div>
+                </div>
+              )}
+
+              {/* Cash Payment Rejected Details */}
+              {currentStatus === 'CASH PAYMENT REJECTED' && (
+                <div
+                  style={{
+                    marginTop: '16px',
+                    padding: '14px',
+                    borderRadius: '8px',
+                    background: '#fef2f2',
+                    border: '1px solid #f87171',
+                    fontSize: '12px',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: '6px'
+                  }}
+                >
+                  <div style={{ color: '#991b1b', fontWeight: 800, fontSize: '13px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    <XCircle size={16} /> Cash Payment Request Rejected by Vendor
+                  </div>
+                  <div style={{ color: '#7f1d1d' }}>
+                    <strong>Reason:</strong> {payment.rejectionReason || 'Cash payment not confirmed or amount mismatch.'}
+                  </div>
+                  {payment.rejectedAt && (
+                    <div style={{ opacity: 0.8, color: '#7f1d1d' }}>
+                      Updated on: {new Date(payment.rejectedAt).toLocaleString('en-IN')}
+                    </div>
+                  )}
+                  <p style={{ margin: '4px 0 0 0', color: '#475569' }}>
+                    Please contact the uniform desk or re-initiate your payment on the uniform portal.
+                  </p>
+                </div>
               )}
 
               {/* Rejected Details */}

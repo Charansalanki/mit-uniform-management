@@ -8,6 +8,7 @@ export type SubmissionStatus = 'submitted' | 'verified' | 'cancelled';
 
 export type PaymentStatus =
   | 'Not Paid'
+  | 'Payment Pending'
   | 'Payment Submitted'
   | 'Submitted'
   | 'Under Verification'
@@ -16,9 +17,14 @@ export type PaymentStatus =
   | 'Payment Successful'
   | 'Payment Rejected'
   | 'Rejected'
-  | 'Payment Not Received';
+  | 'Payment Not Received'
+  | 'CASH PAYMENT PENDING'
+  | 'CASH RECEIVED'
+  | 'CASH PAYMENT REJECTED';
 
-export type PaymentMethodType = 'GPAY' | 'PHONEPE' | 'PAYTM';
+export type PaymentMethodType = 'GPAY' | 'PHONEPE' | 'PAYTM' | 'CASH';
+
+export type PaymentModeType = 'UPI' | 'CASH';
 
 export type PaymentMode = 'FIXED' | 'FLEXIBLE_RANGE';
 
@@ -93,8 +99,12 @@ export interface PaymentSubmission {
   department: string;
   yearSemester: string;
   section: string;
+  gender?: string;
   packageType?: string;
+  paymentModeType?: PaymentModeType;
   paymentMethod: PaymentMethodType;
+  cashPaymentRefId?: string | null;
+  actualAmountReceived?: number | null;
   configIdAtSubmission?: string;
   configVersionAtSubmission?: number;
   paymentModeAtSubmission?: PaymentMode;
@@ -114,8 +124,8 @@ export interface PaymentSubmission {
     revisedByName?: string;
     revisedAt: string;
   }[];
-  utrNumber: string;
-  paymentScreenshot: string;
+  utrNumber?: string | null;
+  paymentScreenshot?: string | null;
   paymentStatus: PaymentStatus;
   reconciliationStatus?: ReconciliationStatus;
   reconciliationDetails?: {
@@ -126,6 +136,9 @@ export interface PaymentSubmission {
   } | null;
   adminRemarks?: string;
   rejectionReason?: string;
+  vendorId?: string | null;
+  vendorName?: string | null;
+  vendorAllocationId?: string | null;
   verifiedBy?: string | null;
   verifiedAt?: string | null;
   createdAt: string;

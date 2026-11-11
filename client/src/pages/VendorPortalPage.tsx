@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { useAuthenticatedSse } from '../hooks/useAuthenticatedSse';
 import TailorMeasurementReportModal from '../components/shared/TailorMeasurementReportModal';
+import VendorCashPaymentManagement from '../components/vendor/VendorCashPaymentManagement';
 import { SIZE_GUIDE_CHARTS } from '../utils/uniformGarmentConfig';
 
 const STATUS_BADGE: Record<string, string> = {
@@ -151,7 +152,7 @@ export default function VendorPortalPage({ apiBaseUrl = '', token: tokenProp }: 
   const [loggingIn, setLoggingIn] = useState(false);
 
   // Portal Navigation State
-  const [activeNav, setActiveNav] = useState<'DASHBOARD' | 'STUDENTS' | 'VERIFICATION' | 'LOGS' | 'REPORTS'>('DASHBOARD');
+  const [activeNav, setActiveNav] = useState<'DASHBOARD' | 'STUDENTS' | 'VERIFICATION' | 'CASH_PAYMENTS' | 'LOGS' | 'REPORTS'>('DASHBOARD');
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [vendorProfile, setVendorProfile] = useState<VendorProfile | null>(null);
   const [stats, setStats] = useState<StatsData>({
@@ -1125,6 +1126,7 @@ export default function VendorPortalPage({ apiBaseUrl = '', token: tokenProp }: 
                   { id: 'DASHBOARD' as const, label: 'Dashboard' },
                   { id: 'STUDENTS' as const, label: `Registered Students (${stats.totalRegisteredStudents})` },
                   { id: 'VERIFICATION' as const, label: `Payment Verification (${stats.totalPaymentsPending})` },
+                  { id: 'CASH_PAYMENTS' as const, label: 'Cash Payments' },
                   { id: 'LOGS' as const, label: 'Payment Logs' },
                   { id: 'REPORTS' as const, label: 'Reports & Exports' }
                 ].map((item) => (
@@ -1184,6 +1186,7 @@ export default function VendorPortalPage({ apiBaseUrl = '', token: tokenProp }: 
               { id: 'DASHBOARD' as const, label: 'Dashboard' },
               { id: 'STUDENTS' as const, label: `Registered Students (${stats.totalRegisteredStudents})` },
               { id: 'VERIFICATION' as const, label: `Payment Verification (${stats.totalPaymentsPending})` },
+              { id: 'CASH_PAYMENTS' as const, label: 'Cash Payments' },
               { id: 'LOGS' as const, label: 'Payment Logs' },
               { id: 'REPORTS' as const, label: 'Reports & Exports' }
             ].map((item) => (
@@ -1832,6 +1835,13 @@ export default function VendorPortalPage({ apiBaseUrl = '', token: tokenProp }: 
               </div>
             </div>
           </div>
+        )}
+
+        {/* ================================================================= */}
+        {/* SECTION: VENDOR DIRECT CASH PAYMENTS MANAGEMENT                   */}
+        {/* ================================================================= */}
+        {activeNav === 'CASH_PAYMENTS' && (
+          <VendorCashPaymentManagement vendorJwt={vendorJwt} apiBaseUrl={apiBaseUrl} />
         )}
 
         {/* MODAL: VENDOR SCREENSHOT INSPECTOR & MANUAL BANK VERIFICATION */}

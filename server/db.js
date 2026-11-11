@@ -514,6 +514,11 @@ export function initSchema() {
       seq INTEGER NOT NULL DEFAULT 10000
     );
 
+    CREATE TABLE IF NOT EXISTS cash_ref_sequences (
+      id TEXT PRIMARY KEY, -- e.g. 'MIT_CASH_REF_2026'
+      seq INTEGER NOT NULL DEFAULT 10000
+    );
+
     CREATE TABLE IF NOT EXISTS student_tracking_records (
       id TEXT PRIMARY KEY,
       application_id TEXT UNIQUE NOT NULL, -- e.g. MIT-2026-10001
@@ -754,6 +759,184 @@ export function initSchema() {
     }
   } catch (err) {
     console.error('Migration error for payment_submissions CHECK constraint:', err);
+  }
+
+  // Migration: Ensure payment_submissions supports CASH payments, nullable UTR, and Cash payment statuses
+  try {
+    const tableInfo = db.prepare("SELECT sql FROM sqlite_master WHERE type='table' AND name='payment_submissions'").get();
+    if (tableInfo && tableInfo.sql && (!tableInfo.sql.includes("'CASH'") || tableInfo.sql.includes("utr_number TEXT UNIQUE NOT NULL"))) {
+      db.exec(`
+        PRAGMA foreign_keys=off;
+        ALTER TABLE payment_submissions RENAME TO payment_submissions_old_cash;
+
+        CREATE TABLE payment_submissions (
+          id TEXT PRIMARY KEY,
+          registration_id TEXT NOT NULL,
+          application_id TEXT DEFAULT '',
+          student_id TEXT,
+          student_name TEXT NOT NULL,
+          usn TEXT NOT NULL,
+          course TEXT DEFAULT 'B.E.',
+          department TEXT NOT NULL,
+          year_semester TEXT NOT NULL,
+          section TEXT NOT NULL,
+          gender TEXT DEFAULT '',
+          package_type TEXT DEFAULT 'standard',
+          payment_mode_type TEXT DEFAULT 'UPI' CHECK (payment_mode_type IN ('UPI', 'CASH')),
+          payment_method TEXT NOT NULL CHECK (payment_method IN ('GPAY', 'PHONEPE', 'PAYTM', 'CASH')),
+          cash_payment_ref_id TEXT,
+          actual_amount_received NUMERIC(10, 2),
+          config_id_at_submission TEXT,
+          config_version_at_submission INTEGER DEFAULT 1,
+          payment_mode_at_submission TEXT DEFAULT 'FIXED',
+          expected_amount NUMERIC(10, 2) NOT NULL,
+          min_allowed_at_submission NUMERIC(10, 2) DEFAULT 1.00,
+          max_allowed_at_submission NUMERIC(10, 2) DEFAULT 10000.00,
+          amount NUMERIC(10, 2) NOT NULL,
+          ocr_extracted_amount NUMERIC(10, 2),
+          bank_verified_amount NUMERIC(10, 2),
+          amount_mismatch_flag INTEGER DEFAULT 0,
+          amount_validation_notes TEXT DEFAULT '',
+          requirement_revision_history TEXT DEFAULT '[]',
+          utr_number TEXT,
+          payment_screenshot TEXT,
+          payment_status TEXT NOT NULL DEFAULT 'Submitted' CHECK (payment_status IN (
+            'Not Paid',
+            'Payment Pending',
+            'Submitted',
+            'Payment Submitted',
+            'Under Verification',
+            'Verified',
+            'Payment Verified',
+            'Payment Successful',
+            'Rejected',
+            'Payment Rejected',
+            'Payment Not Received',
+            'CASH PAYMENT PENDING',
+            'CASH RECEIVED',
+            'CASH PAYMENT REJECTED'
+          )),
+          reconciliation_status TEXT DEFAULT 'Unchecked' CHECK (reconciliation_status IN ('Unchecked', 'Matched', 'Unmatched', 'Suspicious')),
+          reconciliation_details TEXT,
+          admin_remarks TEXT DEFAULT '',
+          rejection_reason TEXT DEFAULT '',
+          verified_by TEXT,
+          verified_at TEXT,
+          vendor_id TEXT,
+          vendor_name TEXT,
+          vendor_allocation_id TEXT,
+          vendor_beneficiary_name TEXT DEFAULT '',
+          vendor_upi_id TEXT DEFAULT '',
+          screenshot_extracted_utr TEXT,
+          utr_ocr_mismatch_flag INTEGER DEFAULT 0,
+          verified_by_role TEXT,
+          verified_by_identifier TEXT,
+          verified_transaction_ref TEXT DEFAULT '',
+          status_history TEXT DEFAULT '[]',
+          created_at TEXT NOT NULL,
+          updated_at TEXT NOT NULL
+        );
+
+        INSERT INTO payment_submissions (
+          id, registration_id, student_id, student_name, usn, department, year_semester, section,
+          package_type, payment_method, config_id_at_submission, config_version_at_submission,
+          payment_mode_at_submission, expected_amount, min_allowed_at_submission, max_allowed_at_submission,
+          amount, ocr_extracted_amount, bank_verified_amount, amount_mismatch_flag, amount_validation_notes,
+          requirement_revision_history, utr_number, payment_screenshot, payment_status, reconciliation_status,
+          reconciliation_details, admin_remarks, rejection_reason, verified_by, verified_at,
+          vendor_id, vendor_name, vendor_allocation_id, vendor_beneficiary_name, vendor_upi_id,
+          screenshot_extracted_utr, utr_ocr_mismatch_flag, verified_by_role, verified_by_identifier,
+          verified_transaction_ref, status_history, created_at, updated_at
+        )
+        SELECT
+          id, registration_id, student_id, student_name, usn, department, year_semester, section,
+          package_type, payment_method, config_id_at_submission, config_version_at_submission,
+          payment_mode_at_submission, expected_amount, min_allowed_at_submission, max_allowed_at_submission,
+          amount, ocr_extracted_amount, bank_verified_amount, amount_mismatch_flag, amount_validation_notes,
+          requirement_revision_history, utr_number, payment_screenshot, payment_status, reconciliation_status,
+          reconciliation_details, admin_remarks, rejection_reason, verified_by, verified_at,
+          vendor_id, vendor_name, vendor_allocation_id, vendor_beneficiary_name, vendor_upi_id,
+          screenshot_extracted_utr, utr_ocr_mismatch_flag, verified_by_role, verified_by_identifier,
+          verified_transaction_ref, status_history, created_at, updated_at
+        FROM payment_submissions_old_cash;
+
+        DROP TABLE payment_submissions_old_cash;
+
+        CREATE UNIQUE INDEX IF NOT EXISTS idx_unique_normalized_utr ON payment_submissions (UPPER(TRIM(utr_number))) WHERE utr_number IS NOT NULL AND utr_number != '';
+        CREATE UNIQUE INDEX IF NOT EXISTS idx_unique_cash_ref_id ON payment_submissions (cash_payment_ref_id) WHERE cash_payment_ref_id IS NOT NULL AND cash_payment_ref_id != '';
+        CREATE INDEX IF NOT EXISTS idx_pay_reg_id ON payment_submissions (registration_id);
+        CREATE INDEX IF NOT EXISTS idx_pay_usn ON payment_submissions (usn);
+        CREATE INDEX IF NOT EXISTS idx_pay_status ON payment_submissions (payment_status);
+        CREATE INDEX IF NOT EXISTS idx_pay_cash_ref ON payment_submissions (cash_payment_ref_id);
+        PRAGMA foreign_keys=on;
+      `);
+    }
+  } catch (e) {
+    console.error('Migration error for payment_submissions CASH schema:', e.message);
+  }
+
+  // Migration: Ensure vendor_transaction_history supports CASH payments and nullable utr_number
+  try {
+    const vthInfo = db.prepare("SELECT sql FROM sqlite_master WHERE type='table' AND name='vendor_transaction_history'").get();
+    if (vthInfo && vthInfo.sql && (vthInfo.sql.includes("utr_number TEXT NOT NULL") || !vthInfo.sql.includes("cash_payment_ref_id"))) {
+      db.exec(`
+        PRAGMA foreign_keys=off;
+        ALTER TABLE vendor_transaction_history RENAME TO vendor_transaction_history_old;
+
+        CREATE TABLE vendor_transaction_history (
+          id TEXT PRIMARY KEY,
+          submission_id TEXT NOT NULL,
+          registration_id TEXT NOT NULL,
+          student_name TEXT NOT NULL,
+          usn TEXT NOT NULL,
+          department TEXT NOT NULL,
+          year_semester TEXT NOT NULL,
+          section TEXT NOT NULL,
+          vendor_ref TEXT,
+          vendor_id TEXT NOT NULL,
+          vendor_name TEXT NOT NULL,
+          payment_method TEXT NOT NULL,
+          payment_amount NUMERIC(10, 2) NOT NULL,
+          verified_bank_amount NUMERIC(10, 2),
+          actual_amount_received NUMERIC(10, 2),
+          cash_payment_ref_id TEXT,
+          utr_number TEXT,
+          payment_screenshot TEXT,
+          previous_status TEXT NOT NULL,
+          payment_status TEXT NOT NULL,
+          verified_by_vendor_id TEXT NOT NULL,
+          verified_by_vendor_name TEXT NOT NULL,
+          verifier_role TEXT DEFAULT 'VENDOR',
+          remarks TEXT DEFAULT '',
+          rejection_reason TEXT DEFAULT '',
+          action_timestamp TEXT NOT NULL,
+          created_at TEXT NOT NULL
+        );
+
+        INSERT INTO vendor_transaction_history (
+          id, submission_id, registration_id, student_name, usn, department, year_semester, section,
+          vendor_ref, vendor_id, vendor_name, payment_method, payment_amount, verified_bank_amount,
+          utr_number, payment_screenshot, previous_status, payment_status, verified_by_vendor_id,
+          verified_by_vendor_name, verifier_role, remarks, action_timestamp, created_at
+        )
+        SELECT
+          id, submission_id, registration_id, student_name, usn, department, year_semester, section,
+          vendor_ref, vendor_id, vendor_name, payment_method, payment_amount, verified_bank_amount,
+          utr_number, payment_screenshot, previous_status, payment_status, verified_by_vendor_id,
+          verified_by_vendor_name, verifier_role, remarks, action_timestamp, created_at
+        FROM vendor_transaction_history_old;
+
+        DROP TABLE vendor_transaction_history_old;
+
+        CREATE INDEX IF NOT EXISTS idx_vth_vendor_id ON vendor_transaction_history(vendor_id);
+        CREATE INDEX IF NOT EXISTS idx_vth_usn ON vendor_transaction_history(usn);
+        CREATE INDEX IF NOT EXISTS idx_vth_action_timestamp ON vendor_transaction_history(action_timestamp DESC);
+        CREATE INDEX IF NOT EXISTS idx_vth_cash_ref ON vendor_transaction_history(cash_payment_ref_id);
+        PRAGMA foreign_keys=on;
+      `);
+    }
+  } catch (e) {
+    console.error('Migration error for vendor_transaction_history CASH schema:', e.message);
   }
 
   // Drop existing triggers if needed to ensure clean creation

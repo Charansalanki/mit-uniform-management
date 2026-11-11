@@ -69,7 +69,8 @@ export function generateStudentSlipHtml(data: StudentSlipData): string {
     data.isPaymentVerified ||
     data.paymentStatus === 'Payment Successful' ||
     data.paymentStatus === 'Verified' ||
-    data.paymentStatus === 'Payment Verified';
+    data.paymentStatus === 'Payment Verified' ||
+    data.paymentStatus === 'CASH RECEIVED';
 
   const rawRegId = data.registrationId || (data.applicationId ? `REG-${data.applicationId.replace(/^MIT-2026-|^MIT-/, '')}` : 'REG-001');
   const displayRegId = escapeHtml(rawRegId);
@@ -492,7 +493,7 @@ export function generateStudentSlipHtml(data: StudentSlipData): string {
         <td class="col-val" style="font-weight: 800; color: #166534;">₹${Number(data.paidAmount || 0).toLocaleString('en-IN')}</td>
       </tr>
       <tr>
-        <td class="col-lbl">Bank UTR / Transaction No.</td>
+        <td class="col-lbl">${data.paymentStatus === 'CASH RECEIVED' || (data.utrNumber && data.utrNumber.startsWith('CASH-')) ? 'Cash Payment Reference ID' : 'Bank UTR / Transaction No.'}</td>
         <td class="col-val" style="font-family: monospace; font-weight: 700;">${safeUtr}</td>
       </tr>
       <tr>

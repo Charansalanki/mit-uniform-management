@@ -14,6 +14,7 @@ import {
 import { api } from '../api';
 import { AdminVendorManagement } from './AdminVendorManagement';
 import AdminVendorTransactionExplorer from './admin/AdminVendorTransactionExplorer';
+import AdminCashPaymentController from './admin/AdminCashPaymentController';
 import {
   CreditCard,
   QrCode,
@@ -36,7 +37,8 @@ import {
   ShieldCheck,
   Download,
   Store,
-  History
+  History,
+  Banknote
 } from 'lucide-react';
 
 const STATUS_PILL: Record<string, { bg: string; text: string; border: string }> = {
@@ -62,6 +64,7 @@ export type PaymentControllerTab =
   | 'VENDOR_MANAGEMENT'
   | 'VERIFICATION'
   | 'RECONCILIATION'
+  | 'CASH_PAYMENTS'
   | 'AUDIT'
   | 'VENDOR_TRANSACTIONS';
 
@@ -431,16 +434,54 @@ export function AdminPaymentController({
               {activeTab === 'VENDOR_MANAGEMENT' && <Store size={14} />}
               {activeTab === 'VERIFICATION' && <CheckCircle2 size={14} />}
               {activeTab === 'RECONCILIATION' && <FileSpreadsheet size={14} />}
+              {activeTab === 'CASH_PAYMENTS' && <Banknote size={14} />}
               {activeTab === 'AUDIT' && <ShieldAlert size={14} />}
               {activeTab === 'VENDOR_TRANSACTIONS' && <History size={14} />}
               {activeTab === 'VENDOR_MANAGEMENT' && 'Vendor Management & Allocations'}
               {activeTab === 'VERIFICATION' && `Bank Verification (${stats.pendingVerification})`}
               {activeTab === 'RECONCILIATION' && 'Bank CSV Reconciliation'}
+              {activeTab === 'CASH_PAYMENTS' && 'Cash Payments Desk'}
               {activeTab === 'AUDIT' && 'Security Audit Logs'}
               {activeTab === 'VENDOR_TRANSACTIONS' && 'Vendor Transaction History'}
             </span>
           </div>
         </div>
+      </div>
+
+      {/* ── Interactive Module Tab Navigation Bar ── */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap', background: '#f8fafc', padding: '8px 12px', borderRadius: '12px', border: '1px solid #e2e8f0' }}>
+        {[
+          { id: 'VENDOR_MANAGEMENT' as const, label: 'Vendors & Allocations', icon: <Store size={14} /> },
+          { id: 'VERIFICATION' as const, label: `Bank Verification (${stats.pendingVerification})`, icon: <CheckCircle2 size={14} /> },
+          { id: 'CASH_PAYMENTS' as const, label: 'Cash Payments Desk', icon: <Banknote size={14} /> },
+          { id: 'RECONCILIATION' as const, label: 'CSV Reconciliation', icon: <FileSpreadsheet size={14} /> },
+          { id: 'VENDOR_TRANSACTIONS' as const, label: 'Vendor History', icon: <History size={14} /> },
+          { id: 'AUDIT' as const, label: 'Security Audit Logs', icon: <ShieldAlert size={14} /> }
+        ].map((item) => (
+          <button
+            key={item.id}
+            type="button"
+            onClick={() => setActiveTab(item.id)}
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '6px',
+              padding: '8px 14px',
+              borderRadius: '8px',
+              fontSize: '12px',
+              fontWeight: 800,
+              cursor: 'pointer',
+              border: activeTab === item.id ? '1.5px solid #2563eb' : '1px solid transparent',
+              background: activeTab === item.id ? '#2563eb' : '#ffffff',
+              color: activeTab === item.id ? '#ffffff' : '#334155',
+              boxShadow: activeTab === item.id ? '0 2px 6px rgba(37,99,235,0.2)' : 'none',
+              transition: 'all 0.15s ease'
+            }}
+          >
+            {item.icon}
+            <span>{item.label}</span>
+          </button>
+        ))}
       </div>
 
       {/* ── Alert Banner ── */}
@@ -873,6 +914,13 @@ export function AdminPaymentController({
         <AdminVendorTransactionExplorer />
       )}
 
+      {/* ═══════════════════════════════════════════════════════════ */}
+      {/* TAB 6: DIRECT CASH PAYMENT CONTROLLER & FINANCIAL AUDIT      */}
+      {/* ═══════════════════════════════════════════════════════════ */}
+      {activeTab === 'CASH_PAYMENTS' && (
+        <AdminCashPaymentController />
+      )}
+
       {/* ── MODAL 3: Manual Bank Verification & Evidence Inspector ── */}
       {inspectModal && (
         <div style={{ position: 'fixed', inset: 0, zIndex: 9999, background: 'rgba(15,23,42,0.7)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 'clamp(8px, 2vw, 16px)', overflowY: 'auto' }}>
@@ -885,18 +933,24 @@ export function AdminPaymentController({
               <div style={{ background: '#fffbeb', border: '1px solid #fde68a', color: '#92400e', padding: '8px 12px', borderRadius: '6px', fontSize: '11px', textAlign: 'center', marginBottom: '12px' }}>
                 A screenshot or student-entered UTR is NOT proof of payment. Verify against the official bank statement.
               </div>
-              <a
-                href={inspectModal.paymentScreenshot.startsWith('http') ? inspectModal.paymentScreenshot : `http://localhost:4000${inspectModal.paymentScreenshot}`}
-                target="_blank"
-                rel="noreferrer"
-                style={{ width: '100%', display: 'flex', justifyContent: 'center' }}
-              >
-                <img
-                  src={inspectModal.paymentScreenshot.startsWith('http') ? inspectModal.paymentScreenshot : `http://localhost:4000${inspectModal.paymentScreenshot}`}
-                  alt="Student Payment Screenshot"
-                  style={{ maxHeight: '340px', maxWidth: '100%', objectFit: 'contain', borderRadius: '8px', border: '1px solid #cbd5e1', background: '#ffffff', padding: '4px' }}
-                />
-              </a>
+              {inspectModal.paymentScreenshot ? (
+                <a
+                  href={inspectModal.paymentScreenshot.startsWith('http') ? inspectModal.paymentScreenshot : `http://localhost:4000${inspectModal.paymentScreenshot}`}
+                  target="_blank"
+                  rel="noreferrer"
+                  style={{ width: '100%', display: 'flex', justifyContent: 'center' }}
+                >
+                  <img
+                    src={inspectModal.paymentScreenshot.startsWith('http') ? inspectModal.paymentScreenshot : `http://localhost:4000${inspectModal.paymentScreenshot}`}
+                    alt="Student Payment Screenshot"
+                    style={{ maxHeight: '340px', maxWidth: '100%', objectFit: 'contain', borderRadius: '8px', border: '1px solid #cbd5e1', background: '#ffffff', padding: '4px' }}
+                  />
+                </a>
+              ) : (
+                <div style={{ padding: '32px 16px', textAlign: 'center', color: '#64748b', fontSize: '13px' }}>
+                  No payment screenshot uploaded (Cash payment / Reference ID: <strong>{inspectModal.cashPaymentRefId || 'N/A'}</strong>)
+                </div>
+              )}
             </div>
 
             {/* Right Column: Verification Workflow */}
