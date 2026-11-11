@@ -34,6 +34,11 @@ function resolveFallbackCdnUrl(path) {
   return GITHUB_RAW_BASE + path.split("/").map(seg => encodeURIComponent(seg)).join("/");
 }
 
+// Secure HTML sanitization using DOMPurify
+const DOMPurify = (typeof window !== "undefined" && window.DOMPurify)
+  ? window.DOMPurify
+  : { sanitize: (s) => String(s || "") };
+
 function escapeHtml(str) {
   return String(str || "")
     .replace(/&/g, "&amp;")
@@ -459,8 +464,8 @@ function renderQuickRecents() {
     return;
   }
   wrap.style.display = "flex";
-  wrap.innerHTML = `<span class="quick-label">Quick jump:</span>` +
-    valid.map(k => `<button type="button" class="quick-link" data-open-room="${escapeHtml(k)}">${escapeHtml(k)}</button>`).join("<span class='dot-sep'>·</span>");
+  wrap.innerHTML = DOMPurify.sanitize(`<span class="quick-label">Quick jump:</span>` +
+    valid.map(k => `<button type="button" class="quick-link" data-open-room="${escapeHtml(k)}">${escapeHtml(k)}</button>`).join("<span class='dot-sep'>·</span>"));
 
   wrap.querySelectorAll("[data-open-room]").forEach(btn => {
     btn.addEventListener("click", () => openRoom(btn.getAttribute("data-open-room")));
@@ -529,7 +534,7 @@ function renderRoomsGrid() {
 
   if (filtered.length === 0) {
     const meta = getCollegeMeta(currentCollege);
-    grid.innerHTML = `
+    grid.innerHTML = DOMPurify.sanitize(`
       <div class="empty-box">
         <svg viewBox="0 0 24 24" class="icon-svg" style="width: 42px; height: 42px; color: var(--color-primary); margin-bottom: 12px;"><path fill="none" stroke="currentColor" stroke-width="2" d="M3 21h18M3 10h18M5 6l7-3 7 3M4 10v11M20 10v11M8 14v4M12 14v4M16 14v4"/></svg>
         <h3>${state.searchQuery ? `No rooms matching "${escapeHtml(state.searchQuery)}"` : `${meta.name} Directory Ready`}</h3>
@@ -539,13 +544,13 @@ function renderRoomsGrid() {
           ${currentCollege !== "engineering" ? '<button type="button" class="button-outlined" id="emptyExploreEngBtn">Explore Engineering (60 Rooms)</button>' : ''}
         </div>
       </div>
-    `;
+    `);
     document.getElementById("emptyChangeCollegeBtn")?.addEventListener("click", () => showPortalView());
     document.getElementById("emptyExploreEngBtn")?.addEventListener("click", () => enterCollege("engineering"));
     return;
   }
 
-  grid.innerHTML = filtered.map(key => {
+  grid.innerHTML = DOMPurify.sanitize(filtered.map(key => {
     const r = state.rooms[key];
     const routes = getRoutesForRoom(r);
     const firstRoute = routes[0];
@@ -591,7 +596,7 @@ function renderRoomsGrid() {
         </div>
       </article>
     `;
-  }).join("");
+  }).join(""));
 
   grid.querySelectorAll("[data-wa-stop-prop]").forEach(link => {
     link.addEventListener("click", (e) => {
@@ -677,7 +682,7 @@ function renderWalkthroughView() {
   document.getElementById("wtRoomTitle").textContent =
     room.name.length <= 5 ? `Room ${room.name}` : room.name;
 
-  document.getElementById("wtRoomMeta").innerHTML = `
+  document.getElementById("wtRoomMeta").innerHTML = DOMPurify.sanitize(`
     <span class="room-college-badge">${escapeHtml(room.college || "Engineering Campus")}</span>
     <span aria-hidden="true">·</span>
     <span>${escapeHtml(room.floor)}</span>
@@ -685,7 +690,7 @@ function renderWalkthroughView() {
     <span>${escapeHtml(room.dept || "Campus Destination")}</span>
     <span aria-hidden="true">·</span>
     <span class="tabular-nums">${photos.length} walkthrough steps</span>
-  `;
+  `);
 
   // Update Direct WhatsApp Share Link for this exact room and selected staircase
   const waLinkEl = document.getElementById("wtWhatsappLink");
@@ -698,11 +703,11 @@ function renderWalkthroughView() {
   const apButtons = document.getElementById("wtStairButtons");
   if (routes.length > 1) {
     apWrap.style.display = "flex";
-    apButtons.innerHTML = routes.map((rt, idx) => `
+    apButtons.innerHTML = DOMPurify.sanitize(routes.map((rt, idx) => `
       <button type="button" class="stair-tab-btn ${idx === state.activeApIndex ? "active" : ""}" data-ap-idx="${idx}">
         ${escapeHtml(rt.label)}
       </button>
-    `).join("");
+    `).join(""));
 
     apButtons.querySelectorAll("[data-ap-idx]").forEach(btn => {
       btn.addEventListener("click", () => {
@@ -730,7 +735,7 @@ function renderWalkthroughView() {
   const stage = document.getElementById("wtPhotoStage");
   if (stage && stage.dataset.roomKey !== state.selectedRoomKey) {
     stage.dataset.roomKey = state.selectedRoomKey;
-    stage.innerHTML = "";
+    stage.innerHTML = DOMPurify.sanitize("");
   }
 
   renderActiveStepPhoto();
@@ -755,8 +760,8 @@ function renderActiveStepPhoto() {
   if (photos.length === 0) {
     if (stepCounter) stepCounter.textContent = "Directions available";
     if (progressFill) progressFill.style.width = "100%";
-    if (stage) stage.innerHTML = `<div class="no-photo-msg">Written directions are shown above. Follow the signs to reach Room ${escapeHtml(room.name)}.</div>`;
-    if (thumbsRow) thumbsRow.innerHTML = "";
+    if (stage) stage.innerHTML = DOMPurify.sanitize(`<div class="no-photo-msg">Written directions are shown above. Follow the signs to reach Room ${escapeHtml(room.name)}.</div>`);
+    if (thumbsRow) thumbsRow.innerHTML = DOMPurify.sanitize("");
     if (stageBadge) stageBadge.style.display = "none";
     return;
   }
@@ -775,7 +780,7 @@ function renderActiveStepPhoto() {
   // Counter & Progress
   const stepTag = idx === 0 ? "Start" : isAtDestination ? "Destination Reached" : "Walking Step";
   if (stepCounter) {
-    stepCounter.innerHTML = `<span class="step-counter-main">Step <span class="step-num">${idx + 1}</span> of ${total}</span> <span class="step-counter-tag ${isAtDestination ? "step-tag-dest" : "step-tag-walk"}">&middot; ${stepTag}</span>`;
+    stepCounter.innerHTML = DOMPurify.sanitize(`<span class="step-counter-main">Step <span class="step-num">${idx + 1}</span> of ${total}</span> <span class="step-counter-tag ${isAtDestination ? "step-tag-dest" : "step-tag-walk"}">&middot; ${stepTag}</span>`);
   }
   if (progressFill) {
     progressFill.style.width = `${((idx + 1) / total) * 100}%`;
@@ -786,29 +791,29 @@ function renderActiveStepPhoto() {
     stageBadge.style.display = "inline-flex";
     if (isAtDestination) {
       stageBadge.className = "stage-overlay-badge destination";
-      stageBadge.innerHTML = `<svg class="icon-svg" viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg> <span>Arrived at ${escapeHtml(room.name)}</span>`;
+      stageBadge.innerHTML = DOMPurify.sanitize(`<svg class="icon-svg" viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg> <span>Arrived at ${escapeHtml(room.name)}</span>`);
     } else if (idx === 0) {
       stageBadge.className = "stage-overlay-badge";
-      stageBadge.innerHTML = `<svg class="icon-svg" viewBox="0 0 24 24"><polygon points="3 11 22 2 13 21 11 13 3 11"/></svg> <span>Starting Point &middot; Step 1 of ${total}</span>`;
+      stageBadge.innerHTML = DOMPurify.sanitize(`<svg class="icon-svg" viewBox="0 0 24 24"><polygon points="3 11 22 2 13 21 11 13 3 11"/></svg> <span>Starting Point &middot; Step 1 of ${total}</span>`);
     } else {
       stageBadge.className = "stage-overlay-badge";
-      stageBadge.innerHTML = `<svg class="icon-svg" viewBox="0 0 24 24"><polyline points="9 18 15 12 9 6"/></svg> <span>Follow Route &middot; Step ${idx + 1} of ${total}</span>`;
+      stageBadge.innerHTML = DOMPurify.sanitize(`<svg class="icon-svg" viewBox="0 0 24 24"><polyline points="9 18 15 12 9 6"/></svg> <span>Follow Route &middot; Step ${idx + 1} of ${total}</span>`);
     }
   }
 
   // Prev / Next button states
   if (prevBtn) {
     prevBtn.disabled = idx === 0;
-    prevBtn.innerHTML = `<svg class="icon-svg" viewBox="0 0 24 24"><polyline points="15 18 9 12 15 6"/></svg> <span>Previous</span>`;
+    prevBtn.innerHTML = DOMPurify.sanitize(`<svg class="icon-svg" viewBox="0 0 24 24"><polyline points="15 18 9 12 15 6"/></svg> <span>Previous</span>`);
   }
   if (nextBtn) {
     if (isAtDestination) {
       nextBtn.classList.add("arrived-btn");
-      nextBtn.innerHTML = `<span>Arrived</span> <svg class="icon-svg" viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg>`;
+      nextBtn.innerHTML = DOMPurify.sanitize(`<span>Arrived</span> <svg class="icon-svg" viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg>`);
       nextBtn.title = `Arrived at Room ${room.name}. Tap to view from start`;
     } else {
       nextBtn.classList.remove("arrived-btn");
-      nextBtn.innerHTML = `<span>Next</span> <svg class="icon-svg" viewBox="0 0 24 24"><polyline points="9 18 15 12 9 6"/></svg>`;
+      nextBtn.innerHTML = DOMPurify.sanitize(`<span>Next</span> <svg class="icon-svg" viewBox="0 0 24 24"><polyline points="9 18 15 12 9 6"/></svg>`);
       nextBtn.title = "Go to next step";
     }
     nextBtn.disabled = false;
@@ -818,21 +823,21 @@ function renderActiveStepPhoto() {
   if (autoPlayBtn && !state.isPlaying) {
     if (isAtDestination) {
       autoPlayBtn.classList.add("reached");
-      autoPlayBtn.innerHTML = `<svg class="icon-svg" viewBox="0 0 24 24"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/></svg><span id="wtAutoPlayLabel">Replay Walk</span>`;
+      autoPlayBtn.innerHTML = DOMPurify.sanitize(`<svg class="icon-svg" viewBox="0 0 24 24"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/></svg><span id="wtAutoPlayLabel">Replay Walk</span>`);
     } else {
       autoPlayBtn.classList.remove("reached");
-      autoPlayBtn.innerHTML = `<svg class="icon-svg" viewBox="0 0 24 24"><polygon points="5 3 19 12 5 21 5 3"/></svg><span id="wtAutoPlayLabel">Auto-Walk</span>`;
+      autoPlayBtn.innerHTML = DOMPurify.sanitize(`<svg class="icon-svg" viewBox="0 0 24 24"><polygon points="5 3 19 12 5 21 5 3"/></svg><span id="wtAutoPlayLabel">Auto-Walk</span>`);
     }
   }
 
   // Instantaneous Media Display
   if (stage) {
     if (isVideo) {
-      stage.innerHTML = `<video src="${url}" controls autoplay muted loop playsinline class="wt-main-media is-ready" onerror="if(!this.dataset.cdn){this.dataset.cdn='1';this.src='${cdnUrl}';}"></video>`;
+      stage.innerHTML = DOMPurify.sanitize(`<video src="${url}" controls autoplay muted loop playsinline class="wt-main-media is-ready" onerror="if(!this.dataset.cdn){this.dataset.cdn='1';this.src='${cdnUrl}';}"></video>`);
     } else {
       let mainImg = stage.querySelector("img.wt-main-media");
       if (!mainImg) {
-        stage.innerHTML = `
+        stage.innerHTML = DOMPurify.sanitize(`
           <img
             src="${url}"
             alt="Step ${idx + 1} towards Room ${room.name}"
@@ -842,7 +847,7 @@ function renderActiveStepPhoto() {
             referrerpolicy="no-referrer"
             onerror="if(!this.dataset.cdn){this.dataset.cdn='1';this.src='${cdnUrl}';}"
           />
-        `;
+        `);
       } else {
         mainImg.alt = `Step ${idx + 1} towards Room ${room.name}`;
         mainImg.fetchPriority = "high";
@@ -858,7 +863,7 @@ function renderActiveStepPhoto() {
   if (thumbsRow) {
     if (thumbsRow.dataset.roomAp !== currentKeyAp) {
       thumbsRow.dataset.roomAp = currentKeyAp;
-      thumbsRow.innerHTML = photos.map((p, i) => {
+      thumbsRow.innerHTML = DOMPurify.sanitize(photos.map((p, i) => {
         const u = resolveMediaUrl(p);
         const cUrl = resolveFallbackCdnUrl(p);
         const isVid = /\.(mp4|webm)$/i.test(p);
@@ -871,7 +876,7 @@ function renderActiveStepPhoto() {
             <span class="step-thumb-num tabular-nums">${i + 1}</span>
           </button>
         `;
-      }).join("");
+      }).join(""));
 
       thumbsRow.querySelectorAll("[data-step-idx]").forEach(btn => {
         btn.addEventListener("click", () => {
@@ -967,7 +972,7 @@ function startAutoPlay() {
   if (playBtn) {
     playBtn.classList.remove("reached");
     playBtn.classList.add("playing");
-    playBtn.innerHTML = `<svg class="icon-svg" viewBox="0 0 24 24"><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></svg><span id="wtAutoPlayLabel">Pause Walk</span>`;
+    playBtn.innerHTML = DOMPurify.sanitize(`<svg class="icon-svg" viewBox="0 0 24 24"><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></svg><span id="wtAutoPlayLabel">Pause Walk</span>`);
   }
 
   if (state.playTimer) clearInterval(state.playTimer);
@@ -987,10 +992,10 @@ function stopAutoPlay(reachedDestination = false) {
     playBtn.classList.remove("playing");
     if (reachedDestination) {
       playBtn.classList.add("reached");
-      playBtn.innerHTML = `<svg class="icon-svg" viewBox="0 0 24 24"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/></svg><span id="wtAutoPlayLabel">Replay Walk</span>`;
+      playBtn.innerHTML = DOMPurify.sanitize(`<svg class="icon-svg" viewBox="0 0 24 24"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/></svg><span id="wtAutoPlayLabel">Replay Walk</span>`);
     } else {
       playBtn.classList.remove("reached");
-      playBtn.innerHTML = `<svg class="icon-svg" viewBox="0 0 24 24"><polygon points="5 3 19 12 5 21 5 3"/></svg><span id="wtAutoPlayLabel">Auto-Walk</span>`;
+      playBtn.innerHTML = DOMPurify.sanitize(`<svg class="icon-svg" viewBox="0 0 24 24"><polygon points="5 3 19 12 5 21 5 3"/></svg><span id="wtAutoPlayLabel">Auto-Walk</span>`);
     }
   }
 }
@@ -1111,7 +1116,7 @@ function bindEvents() {
       const q = portalSearch.value.trim().toLowerCase();
       if (!q) {
         portalDropdown.style.display = "none";
-        portalDropdown.innerHTML = "";
+        portalDropdown.innerHTML = DOMPurify.sanitize("");
         // Reset card filter
         document.querySelectorAll(".wing-card").forEach(c => c.style.display = "flex");
         return;
@@ -1132,10 +1137,10 @@ function bindEvents() {
       }).slice(0, 8);
 
       if (matchedKeys.length === 0) {
-        portalDropdown.innerHTML = `<div style="padding: 14px 18px; font-size: 13px; color: #5f6368; text-align: center;">No campus rooms matching "${escapeHtml(q)}"</div>`;
+        portalDropdown.innerHTML = DOMPurify.sanitize(`<div style="padding: 14px 18px; font-size: 13px; color: #5f6368; text-align: center;">No campus rooms matching "${escapeHtml(q)}"</div>`);
         portalDropdown.style.display = "block";
       } else {
-        portalDropdown.innerHTML = matchedKeys.map(k => {
+        portalDropdown.innerHTML = DOMPurify.sanitize(matchedKeys.map(k => {
           const r = state.rooms[k];
           const title = r.name.length <= 5 ? `Room ${r.name}` : r.name;
           return `
@@ -1152,7 +1157,7 @@ function bindEvents() {
               </button>
             </div>
           `;
-        }).join("");
+        }).join(""));
         portalDropdown.style.display = "block";
       }
     });

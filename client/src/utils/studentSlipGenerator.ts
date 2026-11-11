@@ -3,6 +3,7 @@
 
 import jsPDF from 'jspdf';
 import html2canvas from 'html2canvas';
+import DOMPurify from 'dompurify';
 import { MIT_LOGO_BASE64 } from './mitLogoBase64';
 
 export interface StudentSlipData {
@@ -540,10 +541,16 @@ export function generateStudentSlipHtml(data: StudentSlipData): string {
 // Function to print or save as PDF directly
 export function printStudentSlip(data: StudentSlipData) {
   const html = generateStudentSlipHtml(data);
+  const sanitizedHtml = DOMPurify.sanitize(html, {
+    WHOLE_DOCUMENT: true,
+    ADD_TAGS: ['style', 'title', 'meta', 'link'],
+    ADD_ATTR: ['style', 'data-status'],
+    ADD_DATA_URI_TAGS: ['img']
+  });
   const printWindow = window.open('', '_blank', 'width=850,height=960');
   if (printWindow) {
     printWindow.document.open();
-    printWindow.document.write(html);
+    printWindow.document.write(DOMPurify.sanitize(sanitizedHtml, { WHOLE_DOCUMENT: true }));
     printWindow.document.close();
     printWindow.focus();
     setTimeout(() => {
@@ -562,7 +569,7 @@ export function printStudentSlip(data: StudentSlipData) {
     const doc = iframe.contentWindow?.document;
     if (doc) {
       doc.open();
-      doc.write(html);
+      doc.write(DOMPurify.sanitize(sanitizedHtml, { WHOLE_DOCUMENT: true }));
       doc.close();
       setTimeout(() => {
         iframe.contentWindow?.focus();
@@ -595,7 +602,11 @@ export async function downloadStudentSlip(
     tempContainer.style.width = '794px'; // ~A4 width in px at 96 DPI
     tempContainer.style.background = '#ffffff';
     tempContainer.style.zIndex = '-9999';
-    tempContainer.innerHTML = generateStudentSlipHtml(resolvedData);
+    tempContainer.innerHTML = DOMPurify.sanitize(generateStudentSlipHtml(resolvedData), {
+      ADD_TAGS: ['style'],
+      ADD_ATTR: ['style', 'data-status'],
+      ADD_DATA_URI_TAGS: ['img']
+    });
     document.body.appendChild(tempContainer);
     elementToCapture = (tempContainer.querySelector('.slip-wrapper') as HTMLElement) || tempContainer;
   }
