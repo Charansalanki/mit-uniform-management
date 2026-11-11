@@ -678,23 +678,34 @@ export function AdminPaymentController({
                             </span>
                           )}
                         </td>
-                        <td style={{ padding: '12px 16px', fontFamily: 'monospace', fontWeight: 800, color: '#2563eb' }}>
-                          {sub.utrNumber}
+                        <td style={{ padding: '12px 16px', fontFamily: 'monospace', fontWeight: 800 }}>
+                          {sub.paymentMethod === 'CASH' || sub.paymentModeType === 'CASH' ? (
+                            <div style={{ display: 'flex', flexDirection: 'column' }}>
+                              <span style={{ color: '#c2410c', fontSize: '12px' }}>{sub.cashPaymentRefId || 'Cash Payment'}</span>
+                              <span style={{ fontSize: '10px', color: '#ea580c', fontWeight: 600 }}>CASH REF</span>
+                            </div>
+                          ) : (
+                            <span style={{ color: '#2563eb' }}>{sub.utrNumber || '—'}</span>
+                          )}
                         </td>
-                        <td style={{ padding: '12px 16px' }}>
-                          <button
-                            type="button"
-                            onClick={() => openVerificationModal(sub)}
-                            style={{ background: 'none', border: 'none', color: '#2563eb', fontWeight: 700, cursor: 'pointer', textDecoration: 'underline' }}
-                          >
-                            View Proof
-                          </button>
+                        <td style={{ padding: '12px 16px', whiteSpace: 'nowrap' }}>
+                          {sub.paymentMethod === 'CASH' || sub.paymentModeType === 'CASH' ? (
+                            <span style={{ color: '#64748b', fontSize: '11px', fontWeight: 600 }}>No Proof (Cash)</span>
+                          ) : (
+                            <button
+                              type="button"
+                              onClick={() => openVerificationModal(sub)}
+                              style={{ background: 'none', border: 'none', color: '#2563eb', fontWeight: 700, cursor: 'pointer', textDecoration: 'underline' }}
+                            >
+                              View Proof
+                            </button>
+                          )}
                         </td>
-                        <td style={{ padding: '12px 16px', color: '#64748b' }}>
+                        <td style={{ padding: '12px 16px', color: '#64748b', whiteSpace: 'nowrap' }}>
                           {new Date(sub.createdAt).toLocaleDateString('en-IN')}
                         </td>
-                        <td style={{ padding: '12px 16px' }}>
-                          <span style={{ padding: '3px 8px', borderRadius: '10px', fontSize: '11px', fontWeight: 700, background: statusSt.bg, color: statusSt.text, border: `1px solid ${statusSt.border}` }}>
+                        <td style={{ padding: '12px 16px', whiteSpace: 'nowrap' }}>
+                          <span style={{ padding: '3px 8px', borderRadius: '10px', fontSize: '11px', fontWeight: 700, whiteSpace: 'nowrap', display: 'inline-block', background: statusSt.bg, color: statusSt.text, border: `1px solid ${statusSt.border}` }}>
                             {sub.paymentStatus}
                           </span>
                         </td>

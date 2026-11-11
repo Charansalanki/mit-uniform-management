@@ -747,7 +747,7 @@ export function RegistrationsTable({
                     items.map(s => {
                       const isCollected = Boolean(s.collected_at);
                       const isSelected = selectedIds.includes(s.id);
-                      const isPaid = Boolean(s.paymentVerified || s.paymentStatus === 'Payment Verified');
+                      const isPaid = Boolean(s.paymentVerified || s.paymentStatus === 'Payment Verified' || s.paymentStatus === 'Payment Successful' || s.paymentStatus === 'CASH RECEIVED');
                       const prodStatus = s.productionStatus || 'pending';
                       return (
                         <tr key={s.id} className={`${isSelected ? 'selected-row' : ''} ${isCollected ? 'collected-row' : ''}`}>
@@ -834,9 +834,9 @@ export function RegistrationsTable({
                                 }}
                                 title="Payment Verified against official bank statement"
                               >
-                                <CheckCircle2 size={13} /> Paid
+                                <CheckCircle2 size={13} /> {s.paymentStatus === 'CASH RECEIVED' ? 'Cash Received' : 'Paid'}
                               </span>
-                            ) : s.paymentStatus === 'Payment Submitted' || s.paymentStatus === 'Under Verification' ? (
+                            ) : s.paymentStatus === 'Payment Submitted' || s.paymentStatus === 'Under Verification' || s.paymentStatus === 'CASH PAYMENT PENDING' ? (
                               <span
                                 style={{
                                   display: 'inline-flex',
@@ -848,13 +848,14 @@ export function RegistrationsTable({
                                   fontWeight: 700,
                                   background: '#fef3c7',
                                   color: '#92400e',
-                                  border: '1px solid #fde68a'
+                                  border: '1px solid #fde68a',
+                                  whiteSpace: 'nowrap'
                                 }}
-                                title="Proof submitted, awaiting admin verification"
+                                title={s.paymentStatus === 'CASH PAYMENT PENDING' ? 'Cash Payment requested, awaiting counter collection' : 'Proof submitted, awaiting admin verification'}
                               >
-                                <Clock3 size={12} /> Pending Verification
+                                <Clock3 size={12} /> {s.paymentStatus === 'CASH PAYMENT PENDING' ? 'Cash Pending' : 'Pending Verification'}
                               </span>
-                            ) : s.paymentStatus === 'Payment Rejected' ? (
+                            ) : s.paymentStatus === 'Payment Rejected' || s.paymentStatus === 'CASH PAYMENT REJECTED' ? (
                               <span
                                 style={{
                                   display: 'inline-flex',
@@ -866,10 +867,11 @@ export function RegistrationsTable({
                                   fontWeight: 700,
                                   background: '#fee2e2',
                                   color: '#991b1b',
-                                  border: '1px solid #fca5a5'
+                                  border: '1px solid #fca5a5',
+                                  whiteSpace: 'nowrap'
                                 }}
                               >
-                                <AlertCircle size={12} /> Rejected
+                                <AlertCircle size={12} /> {s.paymentStatus === 'CASH PAYMENT REJECTED' ? 'Cash Rejected' : 'Rejected'}
                               </span>
                             ) : (
                               <span

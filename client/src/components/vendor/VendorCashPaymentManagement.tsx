@@ -636,3 +636,4 @@ export default function VendorCashPaymentManagement({ vendorJwt }: Props) {
     </div>
   );
 }
+

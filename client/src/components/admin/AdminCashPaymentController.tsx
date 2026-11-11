@@ -495,3 +495,4 @@ export default function AdminCashPaymentController({ apiBaseUrl }: Props) {
     </div>
   );
 }
+

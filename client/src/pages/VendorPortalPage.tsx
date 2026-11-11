@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import { Banknote } from 'lucide-react';
 import { useAuthenticatedSse } from '../hooks/useAuthenticatedSse';
 import TailorMeasurementReportModal from '../components/shared/TailorMeasurementReportModal';
 import VendorCashPaymentManagement from '../components/vendor/VendorCashPaymentManagement';
@@ -7,13 +8,17 @@ import { SIZE_GUIDE_CHARTS } from '../utils/uniformGarmentConfig';
 const STATUS_BADGE: Record<string, string> = {
   Verified: 'bg-emerald-100 text-emerald-800 border-emerald-300',
   'Payment Verified': 'bg-emerald-100 text-emerald-800 border-emerald-300',
+  'Payment Successful': 'bg-emerald-100 text-emerald-800 border-emerald-300',
   Submitted: 'bg-amber-100 text-amber-800 border-amber-300',
   'Payment Submitted': 'bg-amber-100 text-amber-800 border-amber-300',
   'Under Verification': 'bg-blue-100 text-blue-800 border-blue-300',
   'Payment Not Received': 'bg-orange-100 text-orange-900 border-orange-300',
   Rejected: 'bg-red-100 text-red-800 border-red-300',
   'Payment Rejected': 'bg-red-100 text-red-800 border-red-300',
-  'Not Paid': 'bg-slate-100 text-slate-600 border-slate-300'
+  'Not Paid': 'bg-slate-100 text-slate-600 border-slate-300',
+  'CASH PAYMENT PENDING': 'bg-amber-100 text-amber-900 border-amber-300',
+  'CASH RECEIVED': 'bg-emerald-100 text-emerald-900 border-emerald-300',
+  'CASH PAYMENT REJECTED': 'bg-red-100 text-red-900 border-red-300'
 };
 
 interface VendorSummary {
@@ -75,7 +80,10 @@ interface PaymentItem {
   trouserSize?: string;
   blazerSize?: string;
   uniform_measurements?: any;
+  paymentModeType?: string;
   paymentMethod: string;
+  cashPaymentRefId?: string | null;
+  actualAmountReceived?: number | null;
   expectedAmount: number;
   amount: number;
   bankVerifiedAmount?: number | null;
@@ -553,6 +561,100 @@ export default function VendorPortalPage({ apiBaseUrl = '', token: tokenProp }: 
       setBanner({ type: 'error', text: 'Network error updating payment status.' });
     } finally {
       setUpdatingStatus(false);
+    }
+  };
+
+  // Handle Vendor Direct Cash Payment Verification & Rejection
+  const handleVendorCashAction = async (action: 'CONFIRM' | 'REJECT') => {
+    if (!inspectPayment) return;
+    const submissionId = inspectPayment._id || inspectPayment.id;
+    if (!submissionId) return;
+
+    if (action === 'CONFIRM') {
+      const enteredAmount = Number(verifiedAmountInput);
+      const expectedAmount = Number(inspectPayment.expectedAmount || inspectPayment.amount);
+
+      if (isNaN(enteredAmount) || enteredAmount <= 0) {
+        setBanner({ type: 'error', text: 'Please enter a valid numeric cash amount received.' });
+        return;
+      }
+
+      if (enteredAmount !== expectedAmount) {
+        setBanner({
+          type: 'error',
+          text: `Amount Mismatch Warning: Entered ₹${enteredAmount.toLocaleString('en-IN')} does not match expected uniform fee ₹${expectedAmount.toLocaleString('en-IN')}. Vendor confirmation is strictly blocked.`
+        });
+        return;
+      }
+
+      if (
+        !window.confirm(
+          `Confirm receipt of exact cash ₹${enteredAmount.toLocaleString('en-IN')} for ${inspectPayment.studentName} (${inspectPayment.usn})? This will immediately mark the status as CASH RECEIVED and unlock the student's official slip.`
+        )
+      ) {
+        return;
+      }
+
+      try {
+        setUpdatingStatus(true);
+        const { res, data } = await vendorFetch(`/api/vendor-portal/cash-payments/${submissionId}/confirm`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            actualAmountReceived: enteredAmount,
+            remarks: remarksInput || 'Cash collected and verified at uniform counter'
+          })
+        });
+
+        if (!res.ok || !data?.success) {
+          setBanner({ type: 'error', text: data?.message || 'Failed to confirm cash payment.' });
+          return;
+        }
+
+        setBanner({
+          type: 'success',
+          text: `Cash payment of ₹${enteredAmount.toLocaleString('en-IN')} confirmed successfully! Status updated to CASH RECEIVED.`
+        });
+        setInspectPayment(null);
+        loadDashboard();
+        loadPayments();
+        loadStudents();
+      } catch (err: any) {
+        setBanner({ type: 'error', text: err?.message || 'Error confirming cash payment.' });
+      } finally {
+        setUpdatingStatus(false);
+      }
+    } else {
+      // REJECT
+      const reason = remarksInput?.trim() || prompt('Enter mandatory rejection reason for cash payment:') || '';
+      if (!reason.trim()) {
+        setBanner({ type: 'error', text: 'Rejection reason is required.' });
+        return;
+      }
+
+      try {
+        setUpdatingStatus(true);
+        const { res, data } = await vendorFetch(`/api/vendor-portal/cash-payments/${submissionId}/reject`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ reason })
+        });
+
+        if (!res.ok || !data?.success) {
+          setBanner({ type: 'error', text: data?.message || 'Failed to reject cash payment.' });
+          return;
+        }
+
+        setBanner({ type: 'success', text: 'Cash payment request rejected.' });
+        setInspectPayment(null);
+        loadDashboard();
+        loadPayments();
+        loadStudents();
+      } catch (err: any) {
+        setBanner({ type: 'error', text: err?.message || 'Error rejecting cash payment.' });
+      } finally {
+        setUpdatingStatus(false);
+      }
     }
   };
 
@@ -1778,54 +1880,106 @@ export default function VendorPortalPage({ apiBaseUrl = '', token: tokenProp }: 
                               Sub: ₹{Number(pay.amount).toLocaleString('en-IN')}
                             </div>
                           </td>
-                          <td className="p-3 font-mono font-bold text-blue-700">
-                            {pay.utrNumber}
+                          <td className="p-3 font-mono font-bold whitespace-nowrap">
+                            {pay.paymentMethod === 'CASH' || pay.paymentModeType === 'CASH' ? (
+                              <div className="flex flex-col">
+                                <span className="text-amber-800 text-[11px] font-mono font-bold">
+                                  {pay.cashPaymentRefId || 'Cash Payment'}
+                                </span>
+                                <span className="text-[9px] text-amber-700 font-sans font-extrabold uppercase tracking-wide">
+                                  CASH REF
+                                </span>
+                              </div>
+                            ) : (
+                              <span className="text-blue-700">{pay.utrNumber || '—'}</span>
+                            )}
                           </td>
-                          <td className="p-3 font-semibold">{pay.paymentMethod}</td>
-                          <td className="p-3">
-                            <button
-                              type="button"
-                              onClick={() => {
-                                setInspectPayment(pay);
-                                setVerifiedAmountInput(String(pay.expectedAmount || pay.amount));
-                                setTransactionRefInput(pay.utrNumber);
-                                setRemarksInput(pay.adminRemarks || '');
-                                setBankCreditConfirmed(false);
-                              }}
-                              className="text-blue-600 hover:underline font-bold cursor-pointer"
-                            >
-                              Inspect Proof
-                            </button>
+                          <td className="p-3 font-semibold whitespace-nowrap">
+                            {pay.paymentMethod === 'CASH' ? (
+                              <span className="inline-flex items-center gap-1 text-amber-800 font-bold">
+                                <Banknote size={14} className="text-amber-600" />
+                                CASH
+                              </span>
+                            ) : (
+                              pay.paymentMethod
+                            )}
                           </td>
-                          <td className="p-3 text-slate-500">
+                          <td className="p-3 whitespace-nowrap">
+                            {pay.paymentMethod === 'CASH' || pay.paymentModeType === 'CASH' ? (
+                              <span className="inline-flex items-center gap-1 text-[11px] text-slate-500 bg-slate-100 px-2 py-0.5 rounded font-medium">
+                                Direct Cash Desk
+                              </span>
+                            ) : (
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setInspectPayment(pay);
+                                  setVerifiedAmountInput(String(pay.expectedAmount || pay.amount));
+                                  setTransactionRefInput(pay.utrNumber);
+                                  setRemarksInput(pay.adminRemarks || '');
+                                  setBankCreditConfirmed(false);
+                                }}
+                                className="text-blue-600 hover:underline font-bold cursor-pointer"
+                              >
+                                Inspect Proof
+                              </button>
+                            )}
+                          </td>
+                          <td className="p-3 text-slate-500 whitespace-nowrap">
                             {new Date(pay.createdAt).toLocaleString('en-IN')}
                           </td>
-                          <td className="p-3">
+                          <td className="p-3 whitespace-nowrap">
                             <span
-                              className={`px-2.5 py-0.5 rounded-full border text-[11px] font-bold ${
+                              className={`px-2.5 py-0.5 rounded-full border text-[11px] font-bold whitespace-nowrap inline-block ${
                                 STATUS_BADGE[pay.paymentStatus] || STATUS_BADGE.Submitted
                               }`}
                             >
                               {pay.paymentStatus}
                             </span>
                           </td>
-                          <td className="p-3 text-[11px] text-slate-600">
+                          <td className="p-3 text-[11px] text-slate-600 whitespace-nowrap">
                             {pay.verifiedByIdentifier || '—'}
                           </td>
-                          <td className="p-3 text-right">
-                            <button
-                              type="button"
-                              onClick={() => {
-                                setInspectPayment(pay);
-                                setVerifiedAmountInput(String(pay.expectedAmount || pay.amount));
-                                setTransactionRefInput(pay.utrNumber);
-                                setRemarksInput(pay.adminRemarks || '');
-                                setBankCreditConfirmed(false);
-                              }}
-                              className="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-lg cursor-pointer"
-                            >
-                              Update Status
-                            </button>
+                          <td className="p-3 text-right whitespace-nowrap">
+                            {pay.paymentMethod === 'CASH' || pay.paymentModeType === 'CASH' ? (
+                              pay.paymentStatus === 'CASH PAYMENT PENDING' ? (
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setInspectPayment(pay);
+                                    setVerifiedAmountInput(String(pay.expectedAmount || pay.amount));
+                                    setTransactionRefInput(pay.cashPaymentRefId || '');
+                                    setRemarksInput('');
+                                    setBankCreditConfirmed(false);
+                                  }}
+                                  className="px-3 py-1.5 bg-amber-600 hover:bg-amber-700 text-white font-bold rounded-lg cursor-pointer text-xs shadow-xs"
+                                >
+                                  Verify Cash
+                                </button>
+                              ) : pay.paymentStatus === 'CASH RECEIVED' ? (
+                                <span className="inline-flex items-center gap-1 text-emerald-700 font-bold text-xs bg-emerald-50 px-2 py-1 rounded border border-emerald-200">
+                                  ✓ Cash Received
+                                </span>
+                              ) : (
+                                <span className="inline-flex items-center gap-1 text-red-700 font-bold text-xs bg-red-50 px-2 py-1 rounded border border-red-200">
+                                  ✕ Cash Rejected
+                                </span>
+                              )
+                            ) : (
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setInspectPayment(pay);
+                                  setVerifiedAmountInput(String(pay.expectedAmount || pay.amount));
+                                  setTransactionRefInput(pay.utrNumber);
+                                  setRemarksInput(pay.adminRemarks || '');
+                                  setBankCreditConfirmed(false);
+                                }}
+                                className="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-lg cursor-pointer text-xs"
+                              >
+                                Update Status
+                              </button>
+                            )}
                           </td>
                         </tr>
                       ))
@@ -1848,32 +2002,75 @@ export default function VendorPortalPage({ apiBaseUrl = '', token: tokenProp }: 
         {inspectPayment && (
           <div className="fixed inset-0 z-50 bg-slate-900/70 backdrop-blur-xs flex items-center justify-center p-2.5 sm:p-4 overflow-y-auto">
             <div className="bg-white rounded-2xl max-w-4xl w-full p-4 sm:p-6 shadow-2xl grid grid-cols-1 md:grid-cols-12 gap-5 sm:gap-6 my-auto max-h-[94vh] overflow-y-auto border border-slate-200">
-              {/* Left: Payment Screenshot */}
+              {/* Left Column: Proof Inspection / Cash Card */}
               <div className="md:col-span-5 bg-slate-50 p-4 rounded-xl border border-slate-200 flex flex-col items-center">
-                <span className="text-xs font-bold uppercase text-slate-700 mb-2">
-                  Submitted Payment Screenshot
-                </span>
-                <div className="w-full bg-amber-50 border border-amber-200 text-amber-900 p-2 rounded text-[11px] mb-3 text-center">
-                  Important: Never rely on the screenshot alone. Check your actual bank statement for UTR <strong>{inspectPayment.utrNumber}</strong>.
-                </div>
-                <img
-                  src={
-                    inspectPayment.paymentScreenshot.startsWith('http')
-                      ? inspectPayment.paymentScreenshot
-                      : `${apiBaseUrl}${inspectPayment.paymentScreenshot}`
-                  }
-                  alt="Payment Screenshot"
-                  className="max-h-96 object-contain bg-white border p-1 rounded"
-                />
+                {inspectPayment.paymentMethod === 'CASH' || inspectPayment.paymentModeType === 'CASH' ? (
+                  <div className="w-full flex flex-col items-center text-center p-2">
+                    <div className="w-16 h-16 rounded-full bg-amber-100 border border-amber-300 flex items-center justify-center text-amber-700 mb-3 shadow-xs">
+                      <Banknote size={32} />
+                    </div>
+                    <span className="text-xs font-bold uppercase tracking-wider text-amber-900 mb-1">
+                      Direct Campus Cash Payment
+                    </span>
+                    <p className="text-xs text-slate-500 mb-4">
+                      Physical cash collection at uniform distribution counter. No online screenshot proof required.
+                    </p>
+
+                    <div className="w-full bg-white border border-amber-200 rounded-lg p-3 text-left space-y-2 mb-3">
+                      <div>
+                        <span className="text-[10px] font-bold text-slate-500 uppercase block">Cash Reference ID</span>
+                        <strong className="font-mono text-base text-amber-900 tracking-tight">
+                          {inspectPayment.cashPaymentRefId || 'Pending'}
+                        </strong>
+                      </div>
+                      <div>
+                        <span className="text-[10px] font-bold text-slate-500 uppercase block">Expected Cash Fee</span>
+                        <strong className="text-sm text-slate-900">
+                          ₹{Number(inspectPayment.expectedAmount).toLocaleString('en-IN')}
+                        </strong>
+                      </div>
+                    </div>
+
+                    <div className="w-full bg-amber-50 border border-amber-200 text-amber-900 p-2.5 rounded text-[11px] text-left">
+                      ⚠️ <strong>Cash Verification Rule:</strong> Verify you have counted the exact cash amount of <strong>₹{Number(inspectPayment.expectedAmount).toLocaleString('en-IN')}</strong> from the student before confirming.
+                    </div>
+                  </div>
+                ) : (
+                  <>
+                    <span className="text-xs font-bold uppercase text-slate-700 mb-2">
+                      Submitted Payment Screenshot
+                    </span>
+                    <div className="w-full bg-amber-50 border border-amber-200 text-amber-900 p-2 rounded text-[11px] mb-3 text-center">
+                      Important: Never rely on the screenshot alone. Check your actual bank statement for UTR <strong>{inspectPayment.utrNumber}</strong>.
+                    </div>
+                    {inspectPayment.paymentScreenshot ? (
+                      <img
+                        src={
+                          inspectPayment.paymentScreenshot.startsWith('http')
+                            ? inspectPayment.paymentScreenshot
+                            : `${apiBaseUrl}${inspectPayment.paymentScreenshot}`
+                        }
+                        alt="Payment Screenshot"
+                        className="max-h-96 object-contain bg-white border p-1 rounded"
+                      />
+                    ) : (
+                      <div className="p-8 text-center text-slate-400 text-xs">
+                        No payment screenshot uploaded
+                      </div>
+                    )}
+                  </>
+                )}
               </div>
 
-              {/* Right: Status Update Controls */}
+              {/* Right Column: Status Controls */}
               <div className="md:col-span-7 flex flex-col justify-between space-y-4">
                 <div className="space-y-4">
                   <div className="flex items-start justify-between border-b pb-3">
                     <div>
                       <h3 className="font-bold text-slate-900 text-base">
-                        Verify Student Payment Record
+                        {inspectPayment.paymentMethod === 'CASH' || inspectPayment.paymentModeType === 'CASH'
+                          ? 'Verify Direct Cash Receipt'
+                          : 'Verify Student Payment Record'}
                       </h3>
                       <p className="text-xs text-slate-500">
                         {inspectPayment.studentName} • USN: <strong>{inspectPayment.usn}</strong> •{' '}
@@ -1909,7 +2106,7 @@ export default function VendorPortalPage({ apiBaseUrl = '', token: tokenProp }: 
                     </button>
                   </div>
 
-                  {/* Read-only Student UTR & Expected Amount */}
+                  {/* Read-only Student Reference & Expected Amount */}
                   <div className="grid grid-cols-3 gap-3 bg-slate-50 p-3 rounded-lg border text-xs">
                     <div>
                       <span className="text-slate-500 block">Expected Amount</span>
@@ -1918,103 +2115,163 @@ export default function VendorPortalPage({ apiBaseUrl = '', token: tokenProp }: 
                       </strong>
                     </div>
                     <div>
-                      <span className="text-slate-500 block">Student UTR (Locked)</span>
+                      <span className="text-slate-500 block">
+                        {inspectPayment.paymentMethod === 'CASH' ? 'Cash Ref (Locked)' : 'Student UTR (Locked)'}
+                      </span>
                       <strong className="font-mono text-blue-700">
-                        {inspectPayment.utrNumber}
+                        {inspectPayment.cashPaymentRefId || inspectPayment.utrNumber || '—'}
                       </strong>
                     </div>
                     <div>
                       <span className="text-slate-500 block">Current Status</span>
-                      <strong>{inspectPayment.paymentStatus}</strong>
+                      <strong className="text-slate-900">{inspectPayment.paymentStatus}</strong>
                     </div>
                   </div>
 
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                    <div>
-                      <label className="block text-xs font-bold text-slate-700 mb-1">
-                        Actual Bank Credit Amount (₹) *
+                  {/* CASH SPECIFIC INPUTS & CONFIRMATION */}
+                  {inspectPayment.paymentMethod === 'CASH' || inspectPayment.paymentModeType === 'CASH' ? (
+                    <>
+                      <div>
+                        <label className="block text-xs font-bold text-slate-700 mb-1">
+                          Actual Cash Received at Uniform Counter (₹) *
+                        </label>
+                        <input
+                          type="number"
+                          value={verifiedAmountInput}
+                          onChange={(e) => setVerifiedAmountInput(e.target.value)}
+                          className="w-full px-3 py-2 text-sm font-bold border border-slate-300 rounded-lg text-slate-900"
+                        />
+                        <span className="text-[11px] text-slate-500 mt-1 block">
+                          Must match expected fee exactly (₹{Number(inspectPayment.expectedAmount).toLocaleString('en-IN')})
+                        </span>
+                      </div>
+
+                      <div>
+                        <label className="block text-xs font-bold text-slate-700 mb-1">
+                          Counter Verification Remarks (Optional)
+                        </label>
+                        <input
+                          type="text"
+                          value={remarksInput}
+                          onChange={(e) => setRemarksInput(e.target.value)}
+                          placeholder="e.g. Received exact cash at campus counter"
+                          className="w-full px-3 py-2 text-xs border border-slate-300 rounded-lg"
+                        />
+                      </div>
+                    </>
+                  ) : (
+                    <>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                        <div>
+                          <label className="block text-xs font-bold text-slate-700 mb-1">
+                            Actual Bank Credit Amount (₹) *
+                          </label>
+                          <input
+                            type="number"
+                            value={verifiedAmountInput}
+                            onChange={(e) => setVerifiedAmountInput(e.target.value)}
+                            className="w-full px-3 py-2 text-xs font-bold border border-slate-300 rounded-lg"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-xs font-bold text-slate-700 mb-1">
+                            Bank Statement Reference (Optional)
+                          </label>
+                          <input
+                            type="text"
+                            value={transactionRefInput}
+                            onChange={(e) => setTransactionRefInput(e.target.value)}
+                            className="w-full px-3 py-2 text-xs font-mono border border-slate-300 rounded-lg"
+                          />
+                        </div>
+                      </div>
+
+                      <div>
+                        <label className="block text-xs font-bold text-slate-700 mb-1">
+                          Verification Remarks (Mandatory for Not Received / Rejected)
+                        </label>
+                        <input
+                          type="text"
+                          value={remarksInput}
+                          onChange={(e) => setRemarksInput(e.target.value)}
+                          placeholder="e.g., Confirmed credit in bank account / UTR not found in statement"
+                          className="w-full px-3 py-2 text-xs border border-slate-300 rounded-lg"
+                        />
+                      </div>
+
+                      <label className="flex items-start gap-2.5 p-3 bg-emerald-50 border border-emerald-200 rounded-xl text-xs text-emerald-950 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={bankCreditConfirmed}
+                          onChange={(e) => setBankCreditConfirmed(e.target.checked)}
+                          className="mt-0.5 cursor-pointer"
+                        />
+                        <span>
+                          <strong>Bank Credit Confirmation:</strong> I have checked our designated vendor bank statement and confirmed that ₹{verifiedAmountInput} with UTR{' '}
+                          <span className="font-mono font-bold">{inspectPayment.utrNumber}</span> has been credited.
+                        </span>
                       </label>
-                      <input
-                        type="number"
-                        value={verifiedAmountInput}
-                        onChange={(e) => setVerifiedAmountInput(e.target.value)}
-                        className="w-full px-3 py-2 text-xs font-bold border border-slate-300 rounded-lg"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-xs font-bold text-slate-700 mb-1">
-                        Bank Statement Reference (Optional)
-                      </label>
-                      <input
-                        type="text"
-                        value={transactionRefInput}
-                        onChange={(e) => setTransactionRefInput(e.target.value)}
-                        className="w-full px-3 py-2 text-xs font-mono border border-slate-300 rounded-lg"
-                      />
-                    </div>
-                  </div>
-
-                  <div>
-                    <label className="block text-xs font-bold text-slate-700 mb-1">
-                      Verification Remarks (Mandatory for Not Received / Rejected)
-                    </label>
-                    <input
-                      type="text"
-                      value={remarksInput}
-                      onChange={(e) => setRemarksInput(e.target.value)}
-                      placeholder="e.g., Confirmed credit in bank account / UTR not found in statement"
-                      className="w-full px-3 py-2 text-xs border border-slate-300 rounded-lg"
-                    />
-                  </div>
-
-                  <label className="flex items-start gap-2.5 p-3 bg-emerald-50 border border-emerald-200 rounded-xl text-xs text-emerald-950 cursor-pointer">
-                    <input
-                      type="checkbox"
-                      checked={bankCreditConfirmed}
-                      onChange={(e) => setBankCreditConfirmed(e.target.checked)}
-                      className="mt-0.5 cursor-pointer"
-                    />
-                    <span>
-                      <strong>Bank Credit Confirmation:</strong> I have checked our designated vendor bank statement and confirmed that ₹{verifiedAmountInput} with UTR{' '}
-                      <span className="font-mono font-bold">{inspectPayment.utrNumber}</span> has been credited.
-                    </span>
-                  </label>
+                    </>
+                  )}
                 </div>
 
-                {/* 4 Required Status Action Buttons */}
+                {/* Status Action Buttons */}
                 <div className="pt-3 border-t flex flex-wrap justify-end gap-2">
-                  <button
-                    type="button"
-                    disabled={updatingStatus}
-                    onClick={() => handleVendorStatusUpdate('Under Verification')}
-                    className="px-3.5 py-2 bg-blue-50 hover:bg-blue-100 text-blue-800 border border-blue-300 text-xs font-bold rounded-lg cursor-pointer disabled:opacity-50"
-                  >
-                    Mark Under Verification
-                  </button>
-                  <button
-                    type="button"
-                    disabled={updatingStatus}
-                    onClick={() => handleVendorStatusUpdate('Payment Not Received')}
-                    className="px-3.5 py-2 bg-orange-50 hover:bg-orange-100 text-orange-900 border border-orange-300 text-xs font-bold rounded-lg cursor-pointer disabled:opacity-50"
-                  >
-                    Mark Payment Not Received
-                  </button>
-                  <button
-                    type="button"
-                    disabled={updatingStatus}
-                    onClick={() => handleVendorStatusUpdate('Rejected')}
-                    className="px-3.5 py-2 bg-red-600 hover:bg-red-700 text-white text-xs font-bold rounded-lg cursor-pointer disabled:opacity-50"
-                  >
-                    Mark Rejected
-                  </button>
-                  <button
-                    type="button"
-                    disabled={updatingStatus}
-                    onClick={() => handleVendorStatusUpdate('Verified')}
-                    className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-lg shadow-sm cursor-pointer disabled:opacity-50"
-                  >
-                    ✓ Mark as Payment Received
-                  </button>
+                  {inspectPayment.paymentMethod === 'CASH' || inspectPayment.paymentModeType === 'CASH' ? (
+                    <>
+                      <button
+                        type="button"
+                        disabled={updatingStatus}
+                        onClick={() => handleVendorCashAction('REJECT')}
+                        className="px-3.5 py-2 bg-red-600 hover:bg-red-700 text-white text-xs font-bold rounded-lg cursor-pointer disabled:opacity-50"
+                      >
+                        ✕ Reject Cash Request
+                      </button>
+                      <button
+                        type="button"
+                        disabled={updatingStatus}
+                        onClick={() => handleVendorCashAction('CONFIRM')}
+                        className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-lg shadow-sm cursor-pointer disabled:opacity-50"
+                      >
+                        ✓ Confirm Cash Received
+                      </button>
+                    </>
+                  ) : (
+                    <>
+                      <button
+                        type="button"
+                        disabled={updatingStatus}
+                        onClick={() => handleVendorStatusUpdate('Under Verification')}
+                        className="px-3.5 py-2 bg-blue-50 hover:bg-blue-100 text-blue-800 border border-blue-300 text-xs font-bold rounded-lg cursor-pointer disabled:opacity-50"
+                      >
+                        Mark Under Verification
+                      </button>
+                      <button
+                        type="button"
+                        disabled={updatingStatus}
+                        onClick={() => handleVendorStatusUpdate('Payment Not Received')}
+                        className="px-3.5 py-2 bg-orange-50 hover:bg-orange-100 text-orange-900 border border-orange-300 text-xs font-bold rounded-lg cursor-pointer disabled:opacity-50"
+                      >
+                        Mark Payment Not Received
+                      </button>
+                      <button
+                        type="button"
+                        disabled={updatingStatus}
+                        onClick={() => handleVendorStatusUpdate('Rejected')}
+                        className="px-3.5 py-2 bg-red-600 hover:bg-red-700 text-white text-xs font-bold rounded-lg cursor-pointer disabled:opacity-50"
+                      >
+                        Mark Rejected
+                      </button>
+                      <button
+                        type="button"
+                        disabled={updatingStatus}
+                        onClick={() => handleVendorStatusUpdate('Verified')}
+                        className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-lg shadow-sm cursor-pointer disabled:opacity-50"
+                      >
+                        ✓ Mark as Payment Received
+                      </button>
+                    </>
+                  )}
                 </div>
               </div>
             </div>
