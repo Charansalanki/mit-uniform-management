@@ -512,10 +512,13 @@ export default function VendorPortalPage({ apiBaseUrl = '', token: tokenProp }: 
     if (!inspectPayment) return;
 
     if (targetStatus === 'Verified') {
+      const isCash = inspectPayment.paymentMethod === 'CASH' || inspectPayment.paymentModeType === 'CASH';
       if (!bankCreditConfirmed) {
         setBanner({
           type: 'error',
-          text: 'You must confirm that the money was actually credited into your bank account before marking as Payment Received.'
+          text: isCash
+            ? 'You must confirm that you have physically collected the cash at the uniform counter before marking as Payment Received.'
+            : 'You must confirm that the money was actually credited into your bank account before marking as Payment Received.'
         });
         return;
       }
@@ -2148,7 +2151,7 @@ export default function VendorPortalPage({ apiBaseUrl = '', token: tokenProp }: 
 
                       <div>
                         <label className="block text-xs font-bold text-slate-700 mb-1">
-                          Counter Verification Remarks (Optional)
+                          Verification Remarks (Mandatory for Not Received / Rejected)
                         </label>
                         <input
                           type="text"
@@ -2158,6 +2161,20 @@ export default function VendorPortalPage({ apiBaseUrl = '', token: tokenProp }: 
                           className="w-full px-3 py-2 text-xs border border-slate-300 rounded-lg"
                         />
                       </div>
+
+                      <label className="flex items-start gap-2.5 p-3 bg-amber-50 border border-amber-200 rounded-xl text-xs text-amber-950 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={bankCreditConfirmed}
+                          onChange={(e) => setBankCreditConfirmed(e.target.checked)}
+                          className="mt-0.5 cursor-pointer"
+                        />
+                        <span>
+                          <strong>Cash Collection Confirmation:</strong> I have physically verified and collected ₹{verifiedAmountInput || inspectPayment.expectedAmount} in cash from student{' '}
+                          <strong>{inspectPayment.studentName}</strong> ({inspectPayment.usn}) for Cash Ref{' '}
+                          <span className="font-mono font-bold">{inspectPayment.cashPaymentRefId || 'Cash Payment'}</span> at the uniform counter.
+                        </span>
+                      </label>
                     </>
                   ) : (
                     <>
@@ -2215,63 +2232,40 @@ export default function VendorPortalPage({ apiBaseUrl = '', token: tokenProp }: 
                   )}
                 </div>
 
-                {/* Status Action Buttons */}
+                {/* 4 Required Status Action Buttons (Identical for UPI & Cash) */}
                 <div className="pt-3 border-t flex flex-wrap justify-end gap-2">
-                  {inspectPayment.paymentMethod === 'CASH' || inspectPayment.paymentModeType === 'CASH' ? (
-                    <>
-                      <button
-                        type="button"
-                        disabled={updatingStatus}
-                        onClick={() => handleVendorCashAction('REJECT')}
-                        className="px-3.5 py-2 bg-red-600 hover:bg-red-700 text-white text-xs font-bold rounded-lg cursor-pointer disabled:opacity-50"
-                      >
-                        ✕ Reject Cash Request
-                      </button>
-                      <button
-                        type="button"
-                        disabled={updatingStatus}
-                        onClick={() => handleVendorCashAction('CONFIRM')}
-                        className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-lg shadow-sm cursor-pointer disabled:opacity-50"
-                      >
-                        ✓ Confirm Cash Received
-                      </button>
-                    </>
-                  ) : (
-                    <>
-                      <button
-                        type="button"
-                        disabled={updatingStatus}
-                        onClick={() => handleVendorStatusUpdate('Under Verification')}
-                        className="px-3.5 py-2 bg-blue-50 hover:bg-blue-100 text-blue-800 border border-blue-300 text-xs font-bold rounded-lg cursor-pointer disabled:opacity-50"
-                      >
-                        Mark Under Verification
-                      </button>
-                      <button
-                        type="button"
-                        disabled={updatingStatus}
-                        onClick={() => handleVendorStatusUpdate('Payment Not Received')}
-                        className="px-3.5 py-2 bg-orange-50 hover:bg-orange-100 text-orange-900 border border-orange-300 text-xs font-bold rounded-lg cursor-pointer disabled:opacity-50"
-                      >
-                        Mark Payment Not Received
-                      </button>
-                      <button
-                        type="button"
-                        disabled={updatingStatus}
-                        onClick={() => handleVendorStatusUpdate('Rejected')}
-                        className="px-3.5 py-2 bg-red-600 hover:bg-red-700 text-white text-xs font-bold rounded-lg cursor-pointer disabled:opacity-50"
-                      >
-                        Mark Rejected
-                      </button>
-                      <button
-                        type="button"
-                        disabled={updatingStatus}
-                        onClick={() => handleVendorStatusUpdate('Verified')}
-                        className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-lg shadow-sm cursor-pointer disabled:opacity-50"
-                      >
-                        ✓ Mark as Payment Received
-                      </button>
-                    </>
-                  )}
+                  <button
+                    type="button"
+                    disabled={updatingStatus}
+                    onClick={() => handleVendorStatusUpdate('Under Verification')}
+                    className="px-3.5 py-2 bg-blue-50 hover:bg-blue-100 text-blue-800 border border-blue-300 text-xs font-bold rounded-lg cursor-pointer disabled:opacity-50"
+                  >
+                    Mark Under Verification
+                  </button>
+                  <button
+                    type="button"
+                    disabled={updatingStatus}
+                    onClick={() => handleVendorStatusUpdate('Payment Not Received')}
+                    className="px-3.5 py-2 bg-orange-50 hover:bg-orange-100 text-orange-900 border border-orange-300 text-xs font-bold rounded-lg cursor-pointer disabled:opacity-50"
+                  >
+                    Mark Payment Not Received
+                  </button>
+                  <button
+                    type="button"
+                    disabled={updatingStatus}
+                    onClick={() => handleVendorStatusUpdate('Rejected')}
+                    className="px-3.5 py-2 bg-red-600 hover:bg-red-700 text-white text-xs font-bold rounded-lg cursor-pointer disabled:opacity-50"
+                  >
+                    Mark Rejected
+                  </button>
+                  <button
+                    type="button"
+                    disabled={updatingStatus}
+                    onClick={() => handleVendorStatusUpdate('Verified')}
+                    className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-lg shadow-sm cursor-pointer disabled:opacity-50"
+                  >
+                    ✓ Mark as Payment Received
+                  </button>
                 </div>
               </div>
             </div>

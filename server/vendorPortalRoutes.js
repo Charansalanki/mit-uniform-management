@@ -394,9 +394,10 @@ router.patch('/admin/payments/submissions/:id/admin-override', requireAdminAuth,
         INSERT INTO vendor_transaction_history (
           id, submission_id, registration_id, student_name, usn, department, year_semester, section,
           vendor_ref, vendor_id, vendor_name, payment_method, payment_amount, verified_bank_amount,
-          utr_number, payment_screenshot, previous_status, payment_status, verified_by_vendor_id,
-          verified_by_vendor_name, verifier_role, remarks, action_timestamp, created_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          actual_amount_received, cash_payment_ref_id, utr_number, payment_screenshot,
+          previous_status, payment_status, verified_by_vendor_id, verified_by_vendor_name,
+          verifier_role, remarks, action_timestamp, created_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `).run(
         crypto.randomUUID(),
         submission.id,
@@ -412,8 +413,10 @@ router.patch('/admin/payments/submissions/:id/admin-override', requireAdminAuth,
         submission.payment_method,
         Number(submission.amount),
         actualBankAmt,
-        submission.utr_number,
-        submission.payment_screenshot,
+        submission.payment_method === 'CASH' ? actualBankAmt : null,
+        submission.cash_payment_ref_id || null,
+        submission.utr_number || null,
+        submission.payment_screenshot || null,
         prevStatus,
         targetStatus,
         vendorId,
@@ -1087,7 +1090,9 @@ router.patch('/vendor-portal/payments/:submissionId/status', requireVendorAuth, 
       if (!bankCreditConfirmed) {
         return res.status(400).json({
           success: false,
-          message: 'Please confirm that you have verified the actual incoming credit in your designated bank account.'
+          message: submission.payment_method === 'CASH'
+            ? 'Please confirm that you have physically collected the cash at the uniform counter.'
+            : 'Please confirm that you have verified the actual incoming credit in your designated bank account.'
         });
       }
 
@@ -1099,22 +1104,27 @@ router.patch('/vendor-portal/payments/:submissionId/status', requireVendorAuth, 
       if (isNaN(actualBankAmt) || actualBankAmt <= 0) {
         return res.status(400).json({
           success: false,
-          message: 'Please enter a valid verified bank credit amount.'
+          message: submission.payment_method === 'CASH'
+            ? 'Please enter a valid cash amount collected.'
+            : 'Please enter a valid verified bank credit amount.'
         });
       }
 
       // Flag if actual bank credit does not match expected amount
       if (actualBankAmt !== Number(submission.expected_amount)) {
-        const notes = `Vendor reported bank credit ₹${actualBankAmt} vs Expected ₹${submission.expected_amount}. Flagged for review.`;
+        const notes = submission.payment_method === 'CASH'
+          ? `Vendor reported counter cash ₹${actualBankAmt} vs Expected ₹${submission.expected_amount}. Flagged for review.`
+          : `Vendor reported bank credit ₹${actualBankAmt} vs Expected ₹${submission.expected_amount}. Flagged for review.`;
         db.prepare(`
           UPDATE payment_submissions
           SET amount_mismatch_flag = 1,
               amount_validation_notes = ?,
               bank_verified_amount = ?,
+              actual_amount_received = ?,
               payment_status = 'Under Verification',
               updated_at = ?
           WHERE id = ?
-        `).run(notes, actualBankAmt, new Date().toISOString(), submission.id);
+        `).run(notes, actualBankAmt, actualBankAmt, new Date().toISOString(), submission.id);
 
         return res.status(400).json({
           success: false,
@@ -1163,6 +1173,7 @@ router.patch('/vendor-portal/payments/:submissionId/status', requireVendorAuth, 
           rejection_reason = ?,
           verified_transaction_ref = ?,
           bank_verified_amount = ?,
+          actual_amount_received = ?,
           amount_mismatch_flag = ?,
           verified_by_role = 'VENDOR',
           verified_by_identifier = ?,
@@ -1175,6 +1186,7 @@ router.patch('/vendor-portal/payments/:submissionId/status', requireVendorAuth, 
       finalRemarks,
       rejectionReason,
       txRef,
+      actualBankAmt,
       actualBankAmt,
       0,
       `${req.vendor.vendor_name} (${vendorId})`,
@@ -1259,9 +1271,10 @@ router.patch('/vendor-portal/payments/:submissionId/status', requireVendorAuth, 
         INSERT INTO vendor_transaction_history (
           id, submission_id, registration_id, student_name, usn, department, year_semester, section,
           vendor_ref, vendor_id, vendor_name, payment_method, payment_amount, verified_bank_amount,
-          utr_number, payment_screenshot, previous_status, payment_status, verified_by_vendor_id,
-          verified_by_vendor_name, verifier_role, remarks, action_timestamp, created_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          actual_amount_received, cash_payment_ref_id, utr_number, payment_screenshot,
+          previous_status, payment_status, verified_by_vendor_id, verified_by_vendor_name,
+          verifier_role, remarks, action_timestamp, created_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `).run(
         crypto.randomUUID(),
         submission.id,
@@ -1277,8 +1290,10 @@ router.patch('/vendor-portal/payments/:submissionId/status', requireVendorAuth, 
         submission.payment_method,
         Number(submission.amount),
         actualBankAmt,
-        submission.utr_number,
-        submission.payment_screenshot,
+        submission.payment_method === 'CASH' ? actualBankAmt : null,
+        submission.cash_payment_ref_id || null,
+        submission.utr_number || null,
+        submission.payment_screenshot || null,
         prevStatus,
         targetStatus,
         vendorId,
