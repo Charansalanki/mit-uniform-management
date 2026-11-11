@@ -461,44 +461,6 @@ router.patch('/admin/payments/submissions/:id/admin-override', requireAdminAuth,
 // PART B: VENDOR PORTAL AUTHENTICATION (TOKEN + MOBILE + FIRST 4 DIGITS PIN)
 // ============================================================================
 
-// GET /api/vendor-portal/authorized-vendors-preview (Public Directory for Direct Vendor Portal Navigation)
-router.get('/vendor-portal/authorized-vendors-preview', async (req, res) => {
-  try {
-    const vendors = db.prepare(`
-      SELECT v.*,
-             a.encrypted_portal_url, a.access_status
-      FROM vendors v
-      LEFT JOIN vendor_portal_access a ON v.vendor_id = a.vendor_id
-      WHERE v.status = 'ACTIVE'
-    `).all();
-
-    const list = [];
-    for (const v of vendors) {
-      let plainUrl = decryptPortalUrl(v.encrypted_portal_url);
-      if (!plainUrl) {
-        const { portalUrl } = await issueVendorPortalLink({ vendor: v, req });
-        plainUrl = portalUrl;
-      }
-      const token = plainUrl ? plainUrl.split('/').pop() : '';
-      const cleanMobile = cleanPhoneDigits(v.mobile);
-      list.push({
-        vendorId: v.vendor_id,
-        vendorName: v.vendor_name,
-        contactPerson: v.contact_person,
-        maskedMobile: cleanMobile.length >= 4 ? `••••••${cleanMobile.slice(-4)}` : '',
-        mobile: cleanMobile,
-        firstFourPin: cleanMobile.slice(0, 4),
-        token,
-        portalUrl: `/vendor/secure-access/${token}`
-      });
-    }
-
-    return res.json({ success: true, vendors: list });
-  } catch (err) {
-    return res.status(500).json({ success: false, message: err.message });
-  }
-});
-
 // GET /api/vendor-portal/verify-link/:rawToken
 router.get('/vendor-portal/verify-link/:rawToken', async (req, res) => {
   try {

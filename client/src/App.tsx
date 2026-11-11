@@ -33,6 +33,7 @@ import AdminAccountSettings from './components/admin/AdminAccountSettings';
 import AdminApplicationController from './components/admin/AdminApplicationController';
 import { AdminPaymentController, PaymentControllerTab } from './components/AdminPaymentController';
 import { AdminVendorManagement } from './components/AdminVendorManagement';
+import { MIT_SEAL_LOGO_BASE64 } from './utils/mitLogoBase64';
 
 export interface AppProps {
   adminProfile?: any;
@@ -232,7 +233,17 @@ export default function App({ adminProfile, onLogout }: AppProps = {}) {
       <aside className={`sidebar ${sidebarOpen ? 'active' : ''}`}>
         <div className="brand">
           <div className="crest">
-            <img src="/mit-logo.png" alt="MIT Mysore Logo" className="mit-admin-crest-img" />
+            <img
+              src="/logo.png"
+              onError={(e) => {
+                const target = e.currentTarget;
+                if (!target.src.startsWith('data:')) {
+                  target.src = MIT_SEAL_LOGO_BASE64;
+                }
+              }}
+              alt="MIT Mysore Logo"
+              className="mit-admin-crest-img"
+            />
           </div>
           <div>
             <b>MIT MYSORE</b>

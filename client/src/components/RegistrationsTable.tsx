@@ -8,6 +8,7 @@ import {
 } from '../types';
 import { DEPARTMENTS, SEMESTERS, ALL_SECTIONS, formatAcademicYear } from '../mockData';
 import { api } from '../api';
+import { MIT_SEAL_LOGO_BASE64 } from '../utils/mitLogoBase64';
 import {
   Search,
   Plus,
@@ -1308,7 +1309,17 @@ export function RegistrationsTable({
             <div className="slip-printable-area">
               <div className="slip-header">
                 <div className="slip-crest">
-                  <img src="/mit-logo.png" alt="MIT Mysore Logo" className="slip-crest-img" />
+                  <img
+                    src="/logo.png"
+                    onError={(e) => {
+                      const target = e.currentTarget;
+                      if (!target.src.startsWith('data:')) {
+                        target.src = MIT_SEAL_LOGO_BASE64;
+                      }
+                    }}
+                    alt="MIT Mysore Logo"
+                    className="slip-crest-img"
+                  />
                 </div>
                 <div>
                   <h4>MAHARAJA INSTITUTE OF TECHNOLOGY MYSORE</h4>

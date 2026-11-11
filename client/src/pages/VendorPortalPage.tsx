@@ -292,26 +292,12 @@ export default function VendorPortalPage({ apiBaseUrl = '', token: tokenProp }: 
 
   const [banner, setBanner] = useState({ type: '', text: '' });
   const [selectedTailorStudent, setSelectedTailorStudent] = useState<any>(null);
-  const [availableVendors, setAvailableVendors] = useState<any[]>([]);
 
-  // 1. Validate the unique portal link on mount (or load authorized vendor directory if token is absent)
-  useEffect(() => {
-    if (!rawToken) {
-      fetch(`${apiBaseUrl}/api/vendor-portal/authorized-vendors-preview`)
-        .then((r) => r.json())
-        .then((d) => {
-          if (d.success && Array.isArray(d.vendors)) {
-            setAvailableVendors(d.vendors);
-          }
-        })
-        .catch(() => {});
-    }
-  }, [apiBaseUrl, rawToken]);
-
+  // 1. Validate the unique portal link on mount
   useEffect(() => {
     const verifyPortalLink = async () => {
       if (!rawToken) {
-        setLinkError('Missing secure access token in URL. Please use your official vendor portal link or choose an authorized vendor below.');
+        setLinkError('Missing secure access token in URL. Please use your official vendor portal link.');
         setLinkChecking(false);
         return;
       }
@@ -1089,51 +1075,12 @@ export default function VendorPortalPage({ apiBaseUrl = '', token: tokenProp }: 
   if (linkError) {
     return (
       <div className="min-h-screen bg-slate-900 flex items-center justify-center p-4">
-        <div className="bg-white rounded-2xl max-w-lg w-full p-6 space-y-4 shadow-2xl border border-slate-200">
-          <div className="text-center space-y-2">
-            <div className="w-12 h-12 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center mx-auto font-bold text-xl">
-              🏢
-            </div>
-            <h2 className="text-lg font-bold text-slate-900">MIT Mysore Vendor Portal Access</h2>
-            <p className="text-xs text-slate-600 leading-relaxed">
-              {availableVendors.length > 0
-                ? 'Select an authorized uniform vendor below to access their secure portal:'
-                : linkError}
-            </p>
+        <div className="bg-white rounded-2xl max-w-md w-full p-6 text-center space-y-3 shadow-2xl">
+          <div className="w-12 h-12 rounded-full bg-red-100 text-red-600 flex items-center justify-center mx-auto font-bold text-xl">
+            !
           </div>
-
-          {availableVendors.length > 0 && (
-            <div className="space-y-2.5 pt-2">
-              {availableVendors.map((v) => (
-                <div
-                  key={v.vendorId}
-                  className="p-3.5 border border-slate-200 rounded-xl hover:border-blue-500 hover:bg-blue-50/50 transition-all flex items-center justify-between gap-3"
-                >
-                  <div className="min-w-0">
-                    <div className="font-bold text-sm text-slate-900 truncate">{v.vendorName}</div>
-                    <div className="text-xs text-slate-500 mt-0.5">
-                      ID: <span className="font-mono text-slate-700 font-semibold">{v.vendorId}</span> • {v.contactPerson}
-                    </div>
-                    <div className="text-[11px] text-blue-700 font-medium mt-1">
-                      Login Mobile: <span className="font-mono font-bold">{v.mobile}</span> (PIN: <span className="font-mono font-bold">{v.firstFourPin}</span>)
-                    </div>
-                  </div>
-                  <a
-                    href={v.portalUrl}
-                    className="shrink-0 px-3.5 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-xs font-bold transition-all text-center shadow-sm"
-                  >
-                    Open Portal &rarr;
-                  </a>
-                </div>
-              ))}
-            </div>
-          )}
-
-          <div className="text-center pt-2 border-t border-slate-100">
-            <a href="/" className="text-xs text-slate-500 hover:text-slate-800 font-medium">
-              &larr; Return to Student Portal
-            </a>
-          </div>
+          <h2 className="text-lg font-bold text-slate-900">Vendor Portal Link Inactive</h2>
+          <p className="text-xs text-slate-600 leading-relaxed">{linkError}</p>
         </div>
       </div>
     );

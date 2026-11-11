@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useRealtimeSystemSync } from '../../hooks/useRealtimeSystemSync';
+import { MIT_SEAL_LOGO_BASE64 } from '../../utils/mitLogoBase64';
 
 const DEFAULT_FALLBACK_TEXT =
   'The application is temporarily unavailable. Please check back later.';
@@ -170,7 +171,13 @@ export default function StudentApplicationGate({
           {/* Top Floating Institutional Badge (Integrated Glass Pill) */}
           <div className="absolute top-5 left-1/2 -translate-x-1/2 z-30 flex items-center gap-2.5 px-4 py-2 rounded-full bg-slate-950/80 backdrop-blur-md border border-white/10 shadow-2xl pointer-events-none">
             <img
-              src="/mit-logo.png"
+              src="/logo.png"
+              onError={(e) => {
+                const target = e.currentTarget;
+                if (!target.src.startsWith('data:')) {
+                  target.src = MIT_SEAL_LOGO_BASE64;
+                }
+              }}
               alt="MIT Mysore"
               className="w-5 h-5 rounded-full object-contain bg-white/10 p-0.5"
             />

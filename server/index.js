@@ -51,6 +51,10 @@ app.use(express.json({ limit: '100kb' }));
 // High-Concurrency Sub-Millisecond L1 RAM Read Cache for 8,000+ Concurrent Students
 app.use(sqliteRamCacheMiddleware);
 
+// Serve public static assets (logos, campus images, PWA manifests) from client
+app.use(express.static(path.join(__dirname, '../client/public')));
+app.use(express.static(path.join(__dirname, '../client/dist')));
+
 // Serve public QR scanner assets statically
 app.use('/uploads/payments/qrs', express.static(path.join(__dirname, 'uploads/payments/qrs')));
 

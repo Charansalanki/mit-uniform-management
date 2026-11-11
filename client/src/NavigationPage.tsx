@@ -17,6 +17,7 @@ import {
 import locoromRoomsData from './locoromData.json';
 import { api } from './api';
 import { parseCampaignYears } from './mockData';
+import { MIT_SEAL_LOGO_BASE64 } from './utils/mitLogoBase64';
 
 export interface LocoromPhoto {
   name: string;
@@ -191,7 +192,17 @@ export default function NavigationPage() {
       <nav className="portal-navbar">
         <div className="nav-brand">
           <div className="nav-logo">
-            <img src="/mit-logo.png" alt="MIT Mysore Logo" className="mit-official-logo" />
+            <img
+              src="/logo.png"
+              onError={(e) => {
+                const target = e.currentTarget;
+                if (!target.src.startsWith('data:')) {
+                  target.src = MIT_SEAL_LOGO_BASE64;
+                }
+              }}
+              alt="MIT Mysore Logo"
+              className="mit-official-logo"
+            />
           </div>
           <div className="nav-title">
             <b>MIT MYSORE</b>

@@ -2,6 +2,7 @@ import { useState, useEffect, useMemo } from 'react';
 import { DistributionSchedule } from './types';
 import { DEPARTMENTS, SEMESTERS, parseCampaignYears, formatAcademicYear } from './mockData';
 import { api } from './api';
+import { MIT_SEAL_LOGO_BASE64 } from './utils/mitLogoBase64';
 import {
   CalendarDays,
   Clock,
@@ -50,7 +51,17 @@ export default function SchedulesPage() {
       <nav className="portal-navbar">
         <div className="nav-brand">
           <div className="nav-logo">
-            <img src="/mit-logo.png" alt="MIT Mysore Logo" className="mit-official-logo" />
+            <img
+              src="/logo.png"
+              onError={(e) => {
+                const target = e.currentTarget;
+                if (!target.src.startsWith('data:')) {
+                  target.src = MIT_SEAL_LOGO_BASE64;
+                }
+              }}
+              alt="MIT Mysore Logo"
+              className="mit-official-logo"
+            />
           </div>
           <div className="nav-title">
             <b>MIT MYSORE</b>

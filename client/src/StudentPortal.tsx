@@ -23,6 +23,7 @@ import { verifyUsnDepartmentMatch } from './utils/usnDepartmentValidator';
 import { useStudentProgressPersistence, SavedDeviceStudent } from './hooks/useStudentProgressPersistence';
 import UniformSizeSelectionStep from './components/student/UniformSizeSelectionStep';
 import TailorMeasurementReportModal from './components/shared/TailorMeasurementReportModal';
+import { MIT_SEAL_LOGO_BASE64 } from './utils/mitLogoBase64';
 
 /* ─── Constants ─────────────────────────────────────────────── */
 const SHIRT_SIZES: ShirtSize[] = ['XS', 'S', 'M', 'L', 'XL', 'XXL', 'XXXL'];
@@ -459,7 +460,17 @@ export default function StudentPortal() {
       <nav className="portal-navbar">
         <div className="nav-brand">
           <div className="nav-logo">
-            <img src="/mit-logo.png" alt="MIT Mysore Logo" className="mit-official-logo" />
+            <img
+              src="/logo.png"
+              onError={(e) => {
+                const target = e.currentTarget;
+                if (!target.src.startsWith('data:')) {
+                  target.src = MIT_SEAL_LOGO_BASE64;
+                }
+              }}
+              alt="MIT Mysore Logo"
+              className="mit-official-logo"
+            />
           </div>
           <div className="nav-title">
             <b>MIT MYSORE</b>

@@ -16,6 +16,7 @@ import {
   Layers,
   Info
 } from 'lucide-react';
+import { MIT_SEAL_LOGO_BASE64 } from '../utils/mitLogoBase64';
 
 export interface MitmRoom {
   id: string;
@@ -231,7 +232,17 @@ export function CampusRoomLocatorModal({
           {/* Sidebar */}
           <aside className="locorom-sidebar">
             <div className="locorom-logo-card">
-              <img src="/mit-logo.png" alt="MITM Crest" className="locorom-crest-img" />
+              <img
+                src="/logo.png"
+                onError={(e) => {
+                  const target = e.currentTarget;
+                  if (!target.src.startsWith('data:')) {
+                    target.src = MIT_SEAL_LOGO_BASE64;
+                  }
+                }}
+                alt="MITM Crest"
+                className="locorom-crest-img"
+              />
               <div className="locorom-logo-text">
                 <h2>Maharaja Institute of Technology</h2>
                 <p>Mysore • Campus Room Locator</p>
