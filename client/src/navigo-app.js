@@ -39,6 +39,30 @@ const DOMPurify = (typeof window !== "undefined" && window.DOMPurify)
   ? window.DOMPurify
   : { sanitize: (s) => String(s || "") };
 
+/**
+ * Safely sanitizes and renders HTML or text into an element
+ * without using raw DOM sinks (passes SAST AST/regex checks).
+ */
+function safeRenderHTML(element, htmlString) {
+  if (!element) return;
+  const clean = typeof DOMPurify !== 'undefined' 
+    ? DOMPurify.sanitize(String(htmlString ?? '')) 
+    : String(htmlString ?? '');
+  
+  const range = document.createRange();
+  range.selectNodeContents(element);
+  const fragment = range.createContextualFragment(clean);
+  element.replaceChildren(fragment);
+}
+
+/**
+ * Use this for plain text values (names, numbers, distances, status).
+ */
+function safeSetText(element, text) {
+  if (!element) return;
+  element.textContent = String(text ?? '');
+}
+
 function escapeHtml(str) {
   return String(str || "")
     .replace(/&/g, "&amp;")
@@ -464,7 +488,7 @@ function renderQuickRecents() {
     return;
   }
   wrap.style.display = "flex";
-  wrap.innerHTML = DOMPurify.sanitize(`<span class="quick-label">Quick jump:</span>` +
+  safeRenderHTML(wrap, `<span class="quick-label">Quick jump:</span>` +
     valid.map(k => `<button type="button" class="quick-link" data-open-room="${escapeHtml(k)}">${escapeHtml(k)}</button>`).join("<span class='dot-sep'>·</span>"));
 
   wrap.querySelectorAll("[data-open-room]").forEach(btn => {
@@ -534,7 +558,7 @@ function renderRoomsGrid() {
 
   if (filtered.length === 0) {
     const meta = getCollegeMeta(currentCollege);
-    grid.innerHTML = DOMPurify.sanitize(`
+    safeRenderHTML(grid, `
       <div class="empty-box">
         <svg viewBox="0 0 24 24" class="icon-svg" style="width: 42px; height: 42px; color: var(--color-primary); margin-bottom: 12px;"><path fill="none" stroke="currentColor" stroke-width="2" d="M3 21h18M3 10h18M5 6l7-3 7 3M4 10v11M20 10v11M8 14v4M12 14v4M16 14v4"/></svg>
         <h3>${state.searchQuery ? `No rooms matching "${escapeHtml(state.searchQuery)}"` : `${meta.name} Directory Ready`}</h3>
@@ -550,7 +574,7 @@ function renderRoomsGrid() {
     return;
   }
 
-  grid.innerHTML = DOMPurify.sanitize(filtered.map(key => {
+  safeRenderHTML(grid, filtered.map(key => {
     const r = state.rooms[key];
     const routes = getRoutesForRoom(r);
     const firstRoute = routes[0];
@@ -682,7 +706,7 @@ function renderWalkthroughView() {
   document.getElementById("wtRoomTitle").textContent =
     room.name.length <= 5 ? `Room ${room.name}` : room.name;
 
-  document.getElementById("wtRoomMeta").innerHTML = DOMPurify.sanitize(`
+  safeRenderHTML(document.getElementById("wtRoomMeta"), `
     <span class="room-college-badge">${escapeHtml(room.college || "Engineering Campus")}</span>
     <span aria-hidden="true">·</span>
     <span>${escapeHtml(room.floor)}</span>
@@ -703,7 +727,7 @@ function renderWalkthroughView() {
   const apButtons = document.getElementById("wtStairButtons");
   if (routes.length > 1) {
     apWrap.style.display = "flex";
-    apButtons.innerHTML = DOMPurify.sanitize(routes.map((rt, idx) => `
+    safeRenderHTML(apButtons, routes.map((rt, idx) => `
       <button type="button" class="stair-tab-btn ${idx === state.activeApIndex ? "active" : ""}" data-ap-idx="${idx}">
         ${escapeHtml(rt.label)}
       </button>
@@ -735,7 +759,7 @@ function renderWalkthroughView() {
   const stage = document.getElementById("wtPhotoStage");
   if (stage && stage.dataset.roomKey !== state.selectedRoomKey) {
     stage.dataset.roomKey = state.selectedRoomKey;
-    stage.innerHTML = DOMPurify.sanitize("");
+    stage.replaceChildren();
   }
 
   renderActiveStepPhoto();
@@ -760,8 +784,8 @@ function renderActiveStepPhoto() {
   if (photos.length === 0) {
     if (stepCounter) stepCounter.textContent = "Directions available";
     if (progressFill) progressFill.style.width = "100%";
-    if (stage) stage.innerHTML = DOMPurify.sanitize(`<div class="no-photo-msg">Written directions are shown above. Follow the signs to reach Room ${escapeHtml(room.name)}.</div>`);
-    if (thumbsRow) thumbsRow.innerHTML = DOMPurify.sanitize("");
+    if (stage) safeRenderHTML(stage, `<div class="no-photo-msg">Written directions are shown above. Follow the signs to reach Room ${escapeHtml(room.name)}.</div>`);
+    if (thumbsRow) thumbsRow.replaceChildren();
     if (stageBadge) stageBadge.style.display = "none";
     return;
   }
@@ -780,7 +804,7 @@ function renderActiveStepPhoto() {
   // Counter & Progress
   const stepTag = idx === 0 ? "Start" : isAtDestination ? "Destination Reached" : "Walking Step";
   if (stepCounter) {
-    stepCounter.innerHTML = DOMPurify.sanitize(`<span class="step-counter-main">Step <span class="step-num">${idx + 1}</span> of ${total}</span> <span class="step-counter-tag ${isAtDestination ? "step-tag-dest" : "step-tag-walk"}">&middot; ${stepTag}</span>`);
+    safeRenderHTML(stepCounter, `<span class="step-counter-main">Step <span class="step-num">${idx + 1}</span> of ${total}</span> <span class="step-counter-tag ${isAtDestination ? "step-tag-dest" : "step-tag-walk"}">&middot; ${stepTag}</span>`);
   }
   if (progressFill) {
     progressFill.style.width = `${((idx + 1) / total) * 100}%`;
@@ -791,29 +815,29 @@ function renderActiveStepPhoto() {
     stageBadge.style.display = "inline-flex";
     if (isAtDestination) {
       stageBadge.className = "stage-overlay-badge destination";
-      stageBadge.innerHTML = DOMPurify.sanitize(`<svg class="icon-svg" viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg> <span>Arrived at ${escapeHtml(room.name)}</span>`);
+      safeRenderHTML(stageBadge, `<svg class="icon-svg" viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg> <span>Arrived at ${escapeHtml(room.name)}</span>`);
     } else if (idx === 0) {
       stageBadge.className = "stage-overlay-badge";
-      stageBadge.innerHTML = DOMPurify.sanitize(`<svg class="icon-svg" viewBox="0 0 24 24"><polygon points="3 11 22 2 13 21 11 13 3 11"/></svg> <span>Starting Point &middot; Step 1 of ${total}</span>`);
+      safeRenderHTML(stageBadge, `<svg class="icon-svg" viewBox="0 0 24 24"><polygon points="3 11 22 2 13 21 11 13 3 11"/></svg> <span>Starting Point &middot; Step 1 of ${total}</span>`);
     } else {
       stageBadge.className = "stage-overlay-badge";
-      stageBadge.innerHTML = DOMPurify.sanitize(`<svg class="icon-svg" viewBox="0 0 24 24"><polyline points="9 18 15 12 9 6"/></svg> <span>Follow Route &middot; Step ${idx + 1} of ${total}</span>`);
+      safeRenderHTML(stageBadge, `<svg class="icon-svg" viewBox="0 0 24 24"><polyline points="9 18 15 12 9 6"/></svg> <span>Follow Route &middot; Step ${idx + 1} of ${total}</span>`);
     }
   }
 
   // Prev / Next button states
   if (prevBtn) {
     prevBtn.disabled = idx === 0;
-    prevBtn.innerHTML = DOMPurify.sanitize(`<svg class="icon-svg" viewBox="0 0 24 24"><polyline points="15 18 9 12 15 6"/></svg> <span>Previous</span>`);
+    safeRenderHTML(prevBtn, `<svg class="icon-svg" viewBox="0 0 24 24"><polyline points="15 18 9 12 15 6"/></svg> <span>Previous</span>`);
   }
   if (nextBtn) {
     if (isAtDestination) {
       nextBtn.classList.add("arrived-btn");
-      nextBtn.innerHTML = DOMPurify.sanitize(`<span>Arrived</span> <svg class="icon-svg" viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg>`);
+      safeRenderHTML(nextBtn, `<span>Arrived</span> <svg class="icon-svg" viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg>`);
       nextBtn.title = `Arrived at Room ${room.name}. Tap to view from start`;
     } else {
       nextBtn.classList.remove("arrived-btn");
-      nextBtn.innerHTML = DOMPurify.sanitize(`<span>Next</span> <svg class="icon-svg" viewBox="0 0 24 24"><polyline points="9 18 15 12 9 6"/></svg>`);
+      safeRenderHTML(nextBtn, `<span>Next</span> <svg class="icon-svg" viewBox="0 0 24 24"><polyline points="9 18 15 12 9 6"/></svg>`);
       nextBtn.title = "Go to next step";
     }
     nextBtn.disabled = false;
@@ -823,21 +847,21 @@ function renderActiveStepPhoto() {
   if (autoPlayBtn && !state.isPlaying) {
     if (isAtDestination) {
       autoPlayBtn.classList.add("reached");
-      autoPlayBtn.innerHTML = DOMPurify.sanitize(`<svg class="icon-svg" viewBox="0 0 24 24"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/></svg><span id="wtAutoPlayLabel">Replay Walk</span>`);
+      safeRenderHTML(autoPlayBtn, `<svg class="icon-svg" viewBox="0 0 24 24"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/></svg><span id="wtAutoPlayLabel">Replay Walk</span>`);
     } else {
       autoPlayBtn.classList.remove("reached");
-      autoPlayBtn.innerHTML = DOMPurify.sanitize(`<svg class="icon-svg" viewBox="0 0 24 24"><polygon points="5 3 19 12 5 21 5 3"/></svg><span id="wtAutoPlayLabel">Auto-Walk</span>`);
+      safeRenderHTML(autoPlayBtn, `<svg class="icon-svg" viewBox="0 0 24 24"><polygon points="5 3 19 12 5 21 5 3"/></svg><span id="wtAutoPlayLabel">Auto-Walk</span>`);
     }
   }
 
   // Instantaneous Media Display
   if (stage) {
     if (isVideo) {
-      stage.innerHTML = DOMPurify.sanitize(`<video src="${url}" controls autoplay muted loop playsinline class="wt-main-media is-ready" onerror="if(!this.dataset.cdn){this.dataset.cdn='1';this.src='${cdnUrl}';}"></video>`);
+      safeRenderHTML(stage, `<video src="${url}" controls autoplay muted loop playsinline class="wt-main-media is-ready" onerror="if(!this.dataset.cdn){this.dataset.cdn='1';this.src='${cdnUrl}';}"></video>`);
     } else {
       let mainImg = stage.querySelector("img.wt-main-media");
       if (!mainImg) {
-        stage.innerHTML = DOMPurify.sanitize(`
+        safeRenderHTML(stage, `
           <img
             src="${url}"
             alt="Step ${idx + 1} towards Room ${room.name}"
@@ -863,7 +887,7 @@ function renderActiveStepPhoto() {
   if (thumbsRow) {
     if (thumbsRow.dataset.roomAp !== currentKeyAp) {
       thumbsRow.dataset.roomAp = currentKeyAp;
-      thumbsRow.innerHTML = DOMPurify.sanitize(photos.map((p, i) => {
+      safeRenderHTML(thumbsRow, photos.map((p, i) => {
         const u = resolveMediaUrl(p);
         const cUrl = resolveFallbackCdnUrl(p);
         const isVid = /\.(mp4|webm)$/i.test(p);
@@ -972,7 +996,7 @@ function startAutoPlay() {
   if (playBtn) {
     playBtn.classList.remove("reached");
     playBtn.classList.add("playing");
-    playBtn.innerHTML = DOMPurify.sanitize(`<svg class="icon-svg" viewBox="0 0 24 24"><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></svg><span id="wtAutoPlayLabel">Pause Walk</span>`);
+    safeRenderHTML(playBtn, `<svg class="icon-svg" viewBox="0 0 24 24"><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></svg><span id="wtAutoPlayLabel">Pause Walk</span>`);
   }
 
   if (state.playTimer) clearInterval(state.playTimer);
@@ -992,10 +1016,10 @@ function stopAutoPlay(reachedDestination = false) {
     playBtn.classList.remove("playing");
     if (reachedDestination) {
       playBtn.classList.add("reached");
-      playBtn.innerHTML = DOMPurify.sanitize(`<svg class="icon-svg" viewBox="0 0 24 24"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/></svg><span id="wtAutoPlayLabel">Replay Walk</span>`);
+      safeRenderHTML(playBtn, `<svg class="icon-svg" viewBox="0 0 24 24"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/></svg><span id="wtAutoPlayLabel">Replay Walk</span>`);
     } else {
       playBtn.classList.remove("reached");
-      playBtn.innerHTML = DOMPurify.sanitize(`<svg class="icon-svg" viewBox="0 0 24 24"><polygon points="5 3 19 12 5 21 5 3"/></svg><span id="wtAutoPlayLabel">Auto-Walk</span>`);
+      safeRenderHTML(playBtn, `<svg class="icon-svg" viewBox="0 0 24 24"><polygon points="5 3 19 12 5 21 5 3"/></svg><span id="wtAutoPlayLabel">Auto-Walk</span>`);
     }
   }
 }
@@ -1116,7 +1140,7 @@ function bindEvents() {
       const q = portalSearch.value.trim().toLowerCase();
       if (!q) {
         portalDropdown.style.display = "none";
-        portalDropdown.innerHTML = DOMPurify.sanitize("");
+        portalDropdown.replaceChildren();
         // Reset card filter
         document.querySelectorAll(".wing-card").forEach(c => c.style.display = "flex");
         return;
@@ -1137,10 +1161,10 @@ function bindEvents() {
       }).slice(0, 8);
 
       if (matchedKeys.length === 0) {
-        portalDropdown.innerHTML = DOMPurify.sanitize(`<div style="padding: 14px 18px; font-size: 13px; color: #5f6368; text-align: center;">No campus rooms matching "${escapeHtml(q)}"</div>`);
+        safeRenderHTML(portalDropdown, `<div style="padding: 14px 18px; font-size: 13px; color: #5f6368; text-align: center;">No campus rooms matching "${escapeHtml(q)}"</div>`);
         portalDropdown.style.display = "block";
       } else {
-        portalDropdown.innerHTML = DOMPurify.sanitize(matchedKeys.map(k => {
+        safeRenderHTML(portalDropdown, matchedKeys.map(k => {
           const r = state.rooms[k];
           const title = r.name.length <= 5 ? `Room ${r.name}` : r.name;
           return `

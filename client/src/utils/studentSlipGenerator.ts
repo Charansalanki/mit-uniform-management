@@ -538,20 +538,39 @@ export function generateStudentSlipHtml(data: StudentSlipData): string {
 </html>`;
 }
 
-// Function to print or save as PDF directly
-export function printStudentSlip(data: StudentSlipData) {
-  const html = generateStudentSlipHtml(data);
-  const sanitizedHtml = DOMPurify.sanitize(html, {
+/**
+ * Safely injects sanitized slip HTML into a target container or document body
+ * using safe native DOM tree construction (DOMParser and replaceChildren).
+ */
+export function renderSafeSlipHTML(targetElement: HTMLElement, rawHtml: string): void {
+  const sanitizedHtml = DOMPurify.sanitize(rawHtml, {
     WHOLE_DOCUMENT: true,
     ADD_TAGS: ['style', 'title', 'meta', 'link'],
     ADD_ATTR: ['style', 'data-status'],
     ADD_DATA_URI_TAGS: ['img']
   });
+
+  const parser = new DOMParser();
+  const parsedDoc = parser.parseFromString(sanitizedHtml, 'text/html');
+
+  // Move parsed styles and body nodes safely into the target element
+  const fragment = document.createDocumentFragment();
+  Array.from(parsedDoc.head.childNodes).forEach((node) => {
+    fragment.appendChild(node.cloneNode(true));
+  });
+  Array.from(parsedDoc.body.childNodes).forEach((node) => {
+    fragment.appendChild(node.cloneNode(true));
+  });
+
+  targetElement.replaceChildren(fragment);
+}
+
+// Function to print or save as PDF directly
+export function printStudentSlip(data: StudentSlipData) {
+  const html = generateStudentSlipHtml(data);
   const printWindow = window.open('', '_blank', 'width=850,height=960');
   if (printWindow) {
-    printWindow.document.open();
-    printWindow.document.write(DOMPurify.sanitize(sanitizedHtml, { WHOLE_DOCUMENT: true }));
-    printWindow.document.close();
+    renderSafeSlipHTML(printWindow.document.body, html);
     printWindow.focus();
     setTimeout(() => {
       printWindow.print();
@@ -568,9 +587,7 @@ export function printStudentSlip(data: StudentSlipData) {
     document.body.appendChild(iframe);
     const doc = iframe.contentWindow?.document;
     if (doc) {
-      doc.open();
-      doc.write(DOMPurify.sanitize(sanitizedHtml, { WHOLE_DOCUMENT: true }));
-      doc.close();
+      renderSafeSlipHTML(doc.body, html);
       setTimeout(() => {
         iframe.contentWindow?.focus();
         iframe.contentWindow?.print();
@@ -602,11 +619,7 @@ export async function downloadStudentSlip(
     tempContainer.style.width = '794px'; // ~A4 width in px at 96 DPI
     tempContainer.style.background = '#ffffff';
     tempContainer.style.zIndex = '-9999';
-    tempContainer.innerHTML = DOMPurify.sanitize(generateStudentSlipHtml(resolvedData), {
-      ADD_TAGS: ['style'],
-      ADD_ATTR: ['style', 'data-status'],
-      ADD_DATA_URI_TAGS: ['img']
-    });
+    renderSafeSlipHTML(tempContainer, generateStudentSlipHtml(resolvedData));
     document.body.appendChild(tempContainer);
     elementToCapture = (tempContainer.querySelector('.slip-wrapper') as HTMLElement) || tempContainer;
   }
