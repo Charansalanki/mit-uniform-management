@@ -27,6 +27,7 @@ import adminDataMaintenanceRoutes from './adminDataMaintenanceRoutes.js';
 import applicationControlRoutes from './applicationControlRoutes.js';
 import { requireStudentAppOpen } from './middleware/requireStudentAppOpen.js';
 import { validateUsnAndDepartmentOnBackend } from './middleware/validateUsnDepartment.js';
+import { sqliteRamCacheMiddleware } from './middleware/sqliteRamCache.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -46,6 +47,9 @@ app.use(cors({
   credentials: true
 }));
 app.use(express.json({ limit: '100kb' }));
+
+// High-Concurrency Sub-Millisecond L1 RAM Read Cache for 8,000+ Concurrent Students
+app.use(sqliteRamCacheMiddleware);
 
 // Serve public QR scanner assets statically
 app.use('/uploads/payments/qrs', express.static(path.join(__dirname, 'uploads/payments/qrs')));

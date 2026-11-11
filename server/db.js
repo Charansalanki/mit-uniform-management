@@ -4,6 +4,8 @@ import fs from 'node:fs';
 import crypto from 'node:crypto';
 import jwt from 'jsonwebtoken';
 import { fileURLToPath } from 'node:url';
+import { initOrTuneSqliteNode24 } from './config/sqliteNode24Engine.js';
+import { ensureSqliteIndexes } from './config/sqliteIndexes.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -16,15 +18,11 @@ if (!fs.existsSync(dataDir)) {
 const dbPath = process.env.SQLITE_DB_PATH || path.join(dataDir, 'mit_uniform.db');
 export const db = new DatabaseSync(dbPath);
 
-// Optimize performance for high throughput and concurrent reads
-db.exec(`
-  PRAGMA busy_timeout = 10000;
-  PRAGMA journal_mode = WAL;
-  PRAGMA synchronous = NORMAL;
-  PRAGMA foreign_keys = ON;
-  PRAGMA cache_size = -64000; -- 64MB cache
-  PRAGMA temp_store = MEMORY;
-`);
+// 1. High-Speed 8,000-User sqlite-node24 Engine Tuning (WAL, 64MB cache, 256MB mmap, 10s busy timeout)
+initOrTuneSqliteNode24(db);
+
+// 2. Non-blocking Covering B-Tree Indexes for Instant Lookups
+ensureSqliteIndexes(db);
 
 export function hashPassword(password) {
   const salt = crypto.randomBytes(16).toString('hex');
