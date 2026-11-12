@@ -24,6 +24,7 @@ import { useStudentProgressPersistence, SavedDeviceStudent } from './hooks/useSt
 import UniformSizeSelectionStep from './components/student/UniformSizeSelectionStep';
 import TailorMeasurementReportModal from './components/shared/TailorMeasurementReportModal';
 import { MIT_SEAL_LOGO_BASE64 } from './utils/mitLogoBase64';
+import { useUgPgApplicationStatus } from './components/student/StudentApplicationGate';
 
 /* ─── Constants ─────────────────────────────────────────────── */
 const SHIRT_SIZES: ShirtSize[] = ['XS', 'S', 'M', 'L', 'XL', 'XXL', 'XXXL'];
@@ -121,6 +122,19 @@ export default function StudentPortal() {
       }
     }
     return 'REGISTRATION';
+  });
+
+  const {
+    ugApplicationOpen,
+    pgApplicationOpen,
+    isCategoryOpenForStudent,
+    openStatusCheck
+  } = useUgPgApplicationStatus();
+
+  const categoryCheck = isCategoryOpenForStudent({
+    usn: form.usn,
+    course: form.course,
+    educationLevel: form.educationLevel
   });
 
   const {
@@ -261,6 +275,10 @@ export default function StudentPortal() {
 
   const goToSizes = (e?: React.MouseEvent) => {
     if (e) e.preventDefault();
+    if (!categoryCheck.isOpen) {
+      showToast(categoryCheck.message, 'error');
+      return;
+    }
     if (!form.usn.trim()) {
       setErrors(prev => ({ ...prev, usn: 'USN / Student ID is required' }));
       validatePersonal();
@@ -280,6 +298,10 @@ export default function StudentPortal() {
 
   /* ─── Submit ─── */
   const handleSubmit = async () => {
+    if (!categoryCheck.isOpen) {
+      showToast(categoryCheck.message, 'error');
+      return;
+    }
     if (!consent) { showToast('Please accept the terms before submitting.', 'error'); return; }
     setSubmitting(true);
     try {
@@ -592,7 +614,62 @@ export default function StudentPortal() {
           </div>
 
           <div className="portal-body">
+            {!categoryCheck.isOpen ? (
+              <div className="max-w-2xl mx-auto my-6 bg-white rounded-2xl border-2 border-rose-300 shadow-md overflow-hidden text-left">
+                <div className="bg-slate-900 text-white px-6 py-5 flex items-center justify-between">
+                  <div>
+                    <span className="text-[11px] font-extrabold uppercase tracking-wider text-rose-400">
+                      {categoryCheck.category === 'UG'
+                        ? 'Undergraduate (UG) Portal Notice'
+                        : 'Postgraduate (PG) Portal Notice'}
+                    </span>
+                    <h2 className="text-xl font-black mt-0.5">
+                      {categoryCheck.category} Uniform Application Is Currently Closed
+                    </h2>
+                  </div>
+                  <span className="px-3 py-1 rounded-full text-xs font-black bg-rose-600 text-white shadow-xs">
+                    {categoryCheck.category}: CLOSED
+                  </span>
+                </div>
 
+                <div className="p-6 space-y-4">
+                  <p className="text-sm text-slate-700 font-medium leading-relaxed">
+                    {categoryCheck.message}
+                  </p>
+
+                  {form.usn && (
+                    <div className="p-3.5 rounded-xl bg-slate-50 border border-slate-200 text-xs text-slate-700 flex items-center justify-between">
+                      <span>
+                        Entered USN <strong className="font-mono">{form.usn}</strong> belongs to{' '}
+                        <strong>{categoryCheck.category} ({form.course || form.department})</strong>.
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => setForm((prev) => ({ ...prev, usn: '', department: '' }))}
+                        className="text-blue-600 hover:underline font-bold cursor-pointer"
+                      >
+                        Clear USN
+                      </button>
+                    </div>
+                  )}
+
+                  <div className="pt-3 border-t border-slate-200 flex flex-wrap items-center justify-between gap-3">
+                    <span className="text-xs text-slate-500 font-medium">
+                      Already registered earlier? Check your live payment status:
+                    </span>
+                    <button
+                      type="button"
+                      onClick={openStatusCheck}
+                      className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-xs font-black rounded-xl shadow-xs transition-colors cursor-pointer flex items-center gap-1.5"
+                    >
+                      <Search size={14} />
+                      <span>Check Application & Payment Status</span>
+                    </button>
+                  </div>
+                </div>
+              </div>
+            ) : (
+              <>
                 {/* ════ STEP 1: Personal Info ════ */}
                 {step === 'personal' && (
                   <div>
@@ -953,8 +1030,10 @@ export default function StudentPortal() {
                     />
                   </div>
                 )}
-              </div>
-            </div>
+              </>
+            )}
+          </div>
+        </div>
 
             {/* ── Footer ── */}
             <footer className="portal-footer" style={{ marginTop: '1.5rem', borderRadius: '12px' }}>

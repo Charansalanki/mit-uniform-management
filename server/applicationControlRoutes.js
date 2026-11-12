@@ -6,15 +6,18 @@ import crypto from 'crypto';
 import { fileURLToPath } from 'url';
 import { db } from './db.js';
 import { requireAdminJwt } from './jwtAuth.js';
-import { getOrInitAppStatus } from './middleware/requireStudentAppOpen.js';
 import sseHub from './sseHub.js';
+import {
+  initUgPgControlTables,
+  getUgPgControlState
+} from './config/ugPgApplicationStatusDb.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-const router = express.Router();
+// Initialize tables in SQLite
+initUgPgControlTables(db);
 
-// Multer storage for uploading/updating the OFF video from Admin Panel
 const videoDir = path.join(__dirname, 'uploads', 'system', 'videos');
 if (!fs.existsSync(videoDir)) {
   try {
@@ -43,261 +46,303 @@ const uploadOffVideo = multer({
   limits: { fileSize: 50 * 1024 * 1024 } // 50 MB limit
 });
 
-// Helper: Broadcast application status change to all open Student & Admin sessions
-const broadcastApplicationStatusChange = (appState) => {
-  try {
-    const nowIso = new Date().toISOString();
+export function createApplicationControlRouter(getDbInstance = () => db) {
+  const router = express.Router();
 
-    // Increment global sync version
-    let syncVersion = 1;
+  // Helper to broadcast status changes
+  const broadcastUgPgChange = (state) => {
     try {
-      db.prepare(`
-        INSERT INTO system_sync_state (id, sync_version, last_event, updated_at)
-        VALUES ('MIT_GLOBAL_SYNC_STATE', 1, ?, datetime('now'))
-        ON CONFLICT(id) DO UPDATE SET
-          sync_version = sync_version + 1,
-          last_event = excluded.last_event,
-          updated_at = datetime('now')
-      `).run(
-        appState.is_application_open
-          ? 'STUDENT_APPLICATION_SWITCHED_ON'
-          : 'STUDENT_APPLICATION_SWITCHED_OFF'
-      );
-
-      const syncRow = db.prepare('SELECT sync_version FROM system_sync_state WHERE id = ?').get('MIT_GLOBAL_SYNC_STATE');
-      if (syncRow) syncVersion = Number(syncRow.sync_version);
-    } catch (_) {}
-
-    const payload = {
-      isApplicationOpen: Boolean(appState.is_application_open),
-      statusLabel: appState.status_label,
-      videoUrl: appState.video_url,
-      fallbackMessage: appState.fallback_message,
-      syncVersion,
-      updatedAt: appState.updated_at || nowIso
-    };
-
-    sseHub.notifyConfigSubscribers('APPLICATION_STATUS_CHANGED', payload);
-    sseHub.notifyConfigSubscribers('GLOBAL_SYNC_UPDATE', payload);
-    sseHub.notifyAdmins('APPLICATION_STATUS_CHANGED', payload);
-    sseHub.broadcast('APPLICATION_STATUS_CHANGED', payload);
-  } catch (err) {
-    console.error('[AppControl] Broadcast app status error:', err.message);
-  }
-};
-
-// ============================================================================
-// 1. PUBLIC ENDPOINT: GET CURRENT STUDENT APPLICATION STATUS
-// ============================================================================
-router.get('/application-status', (req, res) => {
-  try {
-    const appState = getOrInitAppStatus();
-    res.set('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
-    res.set('Pragma', 'no-cache');
-    res.set('Expires', '0');
-
-    const isOpen = Boolean(appState.is_application_open);
-
-    return res.json({
-      success: true,
-      isApplicationOpen: isOpen,
-      statusLabel: isOpen ? 'Application ON' : 'Application OFF',
-      videoUrl: appState.video_url || '/assets/video/application-closed.mp4',
-      fallbackMessage:
-        appState.fallback_message ||
-        'The application is temporarily unavailable. Please check back later.',
-      updatedAt: appState.updated_at
-    });
-  } catch (err) {
-    return res.status(500).json({
-      success: false,
-      message: 'Failed to retrieve application status.'
-    });
-  }
-});
-
-// ============================================================================
-// 2. ADMIN ENDPOINT: GET APPLICATION CONTROLLER DETAILS & HISTORY
-// ============================================================================
-router.get('/admin/application-controller', requireAdminJwt, (req, res) => {
-  try {
-    const appState = getOrInitAppStatus();
-    res.set('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
-
-    let history = [];
-    try {
-      history = JSON.parse(appState.toggle_history || '[]');
-    } catch (_) {}
-
-    const isOpen = Boolean(appState.is_application_open);
-
-    return res.json({
-      success: true,
-      controller: {
-        isApplicationOpen: isOpen,
-        statusLabel: isOpen ? 'Application ON' : 'Application OFF',
-        videoUrl: appState.video_url || '/assets/video/application-closed.mp4',
-        fallbackMessage:
-          appState.fallback_message ||
-          'The application is temporarily unavailable. Please check back later.',
-        updatedByUsername: appState.updated_by_username || 'Administrator',
-        updatedAt: appState.updated_at,
-        toggleHistory: history.slice(-25).reverse()
-      }
-    });
-  } catch (err) {
-    return res.status(500).json({ success: false, message: err.message });
-  }
-});
-
-// ============================================================================
-// 3. ADMIN ENDPOINT: UPDATE APPLICATION ON / OFF STATUS
-// ============================================================================
-router.patch('/admin/application-controller/status', requireAdminJwt, (req, res) => {
-  try {
-    const { isApplicationOpen, videoUrl, fallbackMessage } = req.body;
-
-    if (typeof isApplicationOpen !== 'boolean') {
-      return res.status(400).json({
-        success: false,
-        message: 'isApplicationOpen boolean value (true or false) is required.'
-      });
-    }
-
-    const appState = getOrInitAppStatus();
-    const previousState = Boolean(appState.is_application_open);
-    const newStateInt = isApplicationOpen ? 1 : 0;
-    const newStatusLabel = isApplicationOpen ? 'Application ON' : 'Application OFF';
-
-    const cleanVideoUrl = (videoUrl !== undefined && String(videoUrl).trim() !== '')
-      ? String(videoUrl).trim()
-      : (appState.video_url || '/assets/video/application-closed.mp4');
-
-    const cleanFallback = (fallbackMessage !== undefined && String(fallbackMessage).trim() !== '')
-      ? String(fallbackMessage).trim()
-      : (appState.fallback_message || 'The application is temporarily unavailable. Please check back later.');
-
-    const adminUsername = req.admin?.username || req.admin?.name || 'Administrator';
-    const adminId = req.admin?.adminId || req.adminId || 'SUPER_ADMIN';
-    const nowIso = new Date().toISOString();
-
-    let history = [];
-    try {
-      history = JSON.parse(appState.toggle_history || '[]');
-    } catch (_) {}
-
-    history.push({
-      previousState,
-      newState: isApplicationOpen,
-      changedByUsername: adminUsername,
-      changedAt: nowIso
-    });
-
-    db.prepare(`
-      UPDATE student_application_status
-      SET is_application_open = ?,
-          status_label = ?,
-          video_url = ?,
-          fallback_message = ?,
-          updated_by_admin_id = ?,
-          updated_by_username = ?,
-          toggle_history = ?,
-          updated_at = ?
-      WHERE id = 'MIT_STUDENT_APP_MASTER_SWITCH'
-    `).run(
-      newStateInt,
-      newStatusLabel,
-      cleanVideoUrl,
-      cleanFallback,
-      adminId,
-      adminUsername,
-      JSON.stringify(history),
-      nowIso
-    );
-
-    // Audit log
-    try {
-      db.prepare(`
-        INSERT INTO payment_audit_logs (
-          id, actor_type, actor_identifier, action,
-          previous_state, new_state, ip_address, created_at
-        ) VALUES (?, 'ADMIN', ?, 'STUDENT_APPLICATION_STATUS_TOGGLED', ?, ?, ?, ?)
-      `).run(
-        crypto.randomUUID(),
-        adminUsername,
-        JSON.stringify({ previousState: previousState ? 'Application ON' : 'Application OFF' }),
-        JSON.stringify({ newState: newStatusLabel, videoUrl: cleanVideoUrl, fallbackMessage: cleanFallback }),
-        req.ip || '127.0.0.1',
-        nowIso
-      );
-    } catch (_) {}
-
-    const updatedRow = getOrInitAppStatus();
-    broadcastApplicationStatusChange(updatedRow);
-
-    return res.json({
-      success: true,
-      message: `Student Application is now switched ${
-        isApplicationOpen ? 'ON (Active for Students)' : 'OFF (Displaying Video Screen)'
-      }. All existing student registrations, UTRs, and payment records remain untouched.`,
-      controller: {
-        isApplicationOpen,
-        statusLabel: newStatusLabel,
-        videoUrl: cleanVideoUrl,
-        fallbackMessage: cleanFallback,
-        updatedByUsername: adminUsername,
-        updatedAt: nowIso,
-        toggleHistory: history.slice(-25).reverse()
-      }
-    });
-  } catch (err) {
-    return res.status(500).json({ success: false, message: err.message });
-  }
-});
-
-// ============================================================================
-// 4. ADMIN ENDPOINT: UPLOAD OR UPDATE THE OFF-SCREEN VIDEO FILE
-// ============================================================================
-router.post(
-  '/admin/application-controller/upload-video',
-  requireAdminJwt,
-  uploadOffVideo.single('videoFile'),
-  (req, res) => {
-    try {
-      if (!req.file) {
-        return res.status(400).json({
-          success: false,
-          message: 'Please select a valid video file (MP4, WebM, MOV).'
-        });
-      }
-
-      const adminUsername = req.admin?.username || req.admin?.name || 'Administrator';
-      const adminId = req.admin?.adminId || req.adminId || 'SUPER_ADMIN';
-      const newVideoUrl = `/uploads/system/videos/${req.file.filename}`;
+      const activeDb = typeof getDbInstance === 'function' ? getDbInstance() : getDbInstance;
       const nowIso = new Date().toISOString();
+      let syncVersion = Date.now();
 
-      db.prepare(`
-        UPDATE student_application_status
-        SET video_url = ?,
-            updated_by_admin_id = ?,
-            updated_by_username = ?,
-            updated_at = ?
-        WHERE id = 'MIT_STUDENT_APP_MASTER_SWITCH'
-      `).run(newVideoUrl, adminId, adminUsername, nowIso);
+      try {
+        activeDb.prepare(`
+          INSERT INTO system_sync_state (id, sync_version, last_event, updated_at)
+          VALUES ('MIT_GLOBAL_SYNC_STATE', 1, ?, datetime('now'))
+          ON CONFLICT(id) DO UPDATE SET
+            sync_version = sync_version + 1,
+            last_event = excluded.last_event,
+            updated_at = datetime('now')
+        `).run('UG_PG_APPLICATION_STATUS_TOGGLED');
 
-      const updatedRow = getOrInitAppStatus();
-      broadcastApplicationStatusChange(updatedRow);
+        const syncRow = activeDb
+          .prepare('SELECT sync_version FROM system_sync_state WHERE id = ?')
+          .get('MIT_GLOBAL_SYNC_STATE');
+        if (syncRow) syncVersion = Number(syncRow.sync_version);
+      } catch (_) {}
+
+      const livePayload = {
+        ...state,
+        eventName: 'UG_PG_STATUS_CHANGED',
+        syncVersion,
+        updatedAt: state.lastUpdatedAt || nowIso
+      };
+
+      sseHub.notifyConfigSubscribers('APPLICATION_STATUS_CHANGED', livePayload);
+      sseHub.notifyConfigSubscribers('GLOBAL_SYNC_UPDATE', livePayload);
+      sseHub.notifyAdmins('APPLICATION_STATUS_CHANGED', livePayload);
+      sseHub.broadcast('APPLICATION_STATUS_CHANGED', livePayload);
+      sseHub.broadcast('UG_PG_STATUS_CHANGED', livePayload);
+    } catch (err) {
+      console.error('[AppControl] Broadcast UG/PG status error:', err.message);
+    }
+  };
+
+  // ==========================================================================
+  // 1. PUBLIC ENDPOINT: GET /api/application-status
+  // Live independent UG & PG states with zero caching
+  // ==========================================================================
+  router.get('/application-status', (req, res) => {
+    try {
+      const activeDb = typeof getDbInstance === 'function' ? getDbInstance() : getDbInstance;
+      const state = getUgPgControlState(activeDb);
+
+      res.set('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+      res.set('Pragma', 'no-cache');
+      res.set('Expires', '0');
 
       return res.json({
         success: true,
-        message: 'Application OFF video uploaded and configured successfully.',
-        videoUrl: newVideoUrl
+        ugApplicationOpen: state.ugApplicationOpen,
+        pgApplicationOpen: state.pgApplicationOpen,
+        ugStatusLabel: state.ugStatusLabel,
+        pgStatusLabel: state.pgStatusLabel,
+        bothClosed: state.bothClosed,
+        bothOpen: state.bothOpen,
+        isApplicationOpen: state.ugApplicationOpen || state.pgApplicationOpen,
+        statusLabel: (state.ugApplicationOpen || state.pgApplicationOpen) ? 'Application ON' : 'Application OFF',
+        ugClosedMessage: state.ugClosedMessage,
+        pgClosedMessage: state.pgClosedMessage,
+        videoUrl: state.videoUrl,
+        fallbackMessage: state.bothClosed
+          ? 'Uniform registration is currently closed.'
+          : (!state.ugApplicationOpen ? state.ugClosedMessage : state.pgClosedMessage),
+        ugUpdatedBy: state.ugUpdatedBy,
+        ugUpdatedAt: state.ugUpdatedAt,
+        pgUpdatedBy: state.pgUpdatedBy,
+        pgUpdatedAt: state.pgUpdatedAt,
+        lastUpdatedBy: state.lastUpdatedBy,
+        lastUpdatedAt: state.lastUpdatedAt
+      });
+    } catch (err) {
+      return res.status(500).json({
+        success: false,
+        message: 'Unable to retrieve UG/PG application status.'
+      });
+    }
+  });
+
+  // ==========================================================================
+  // 2. ADMIN ENDPOINT: GET /api/admin/application-controller
+  // ==========================================================================
+  router.get('/admin/application-controller', requireAdminJwt, (req, res) => {
+    try {
+      const activeDb = typeof getDbInstance === 'function' ? getDbInstance() : getDbInstance;
+      const state = getUgPgControlState(activeDb);
+      res.set('Cache-Control', 'no-store');
+      return res.json({
+        success: true,
+        controller: state
       });
     } catch (err) {
       return res.status(500).json({ success: false, message: err.message });
     }
-  }
-);
+  });
 
-export default router;
+  // ==========================================================================
+  // 3. ADMIN ENDPOINT: PATCH /api/admin/application-controller/status
+  // Toggles UG independently, PG independently, or updates custom notice messages
+  // ==========================================================================
+  router.patch('/admin/application-controller/status', requireAdminJwt, (req, res) => {
+    try {
+      const activeDb = typeof getDbInstance === 'function' ? getDbInstance() : getDbInstance;
+      initUgPgControlTables(activeDb);
 
+      const currentState = getUgPgControlState(activeDb);
+      const {
+        ugApplicationOpen,
+        pgApplicationOpen,
+        ugClosedMessage,
+        pgClosedMessage,
+        videoUrl
+      } = req.body;
+
+      const nextUgOpen =
+        typeof ugApplicationOpen === 'boolean'
+          ? ugApplicationOpen
+          : currentState.ugApplicationOpen;
+
+      const nextPgOpen =
+        typeof pgApplicationOpen === 'boolean'
+          ? pgApplicationOpen
+          : currentState.pgApplicationOpen;
+
+      const adminUsername = req.admin?.username || req.admin?.name || 'Administrator';
+      const nowIso = new Date().toISOString();
+
+      const ugChanged = nextUgOpen !== currentState.ugApplicationOpen;
+      const pgChanged = nextPgOpen !== currentState.pgApplicationOpen;
+
+      const nextUgUpdatedBy = ugChanged ? adminUsername : currentState.ugUpdatedBy;
+      const nextUgUpdatedAt = ugChanged ? nowIso : currentState.ugUpdatedAt;
+      const nextPgUpdatedBy = pgChanged ? adminUsername : currentState.pgUpdatedBy;
+      const nextPgUpdatedAt = pgChanged ? nowIso : currentState.pgUpdatedAt;
+
+      const cleanUgMsg =
+        ugClosedMessage !== undefined && String(ugClosedMessage).trim() !== ''
+          ? String(ugClosedMessage).trim()
+          : currentState.ugClosedMessage;
+
+      const cleanPgMsg =
+        pgClosedMessage !== undefined && String(pgClosedMessage).trim() !== ''
+          ? String(pgClosedMessage).trim()
+          : currentState.pgClosedMessage;
+
+      const cleanVideoUrl =
+        videoUrl !== undefined && String(videoUrl).trim() !== ''
+          ? String(videoUrl).trim()
+          : currentState.videoUrl;
+
+      activeDb.prepare(`
+        UPDATE application_category_controls
+        SET ug_open = ?,
+            pg_open = ?,
+            ug_closed_message = ?,
+            pg_closed_message = ?,
+            video_url = ?,
+            ug_updated_by = ?,
+            ug_updated_at = ?,
+            pg_updated_by = ?,
+            pg_updated_at = ?,
+            updated_by = ?,
+            updated_at = ?
+        WHERE id = 'MIT_UG_PG_MASTER_CONTROL'
+      `).run(
+        nextUgOpen ? 1 : 0,
+        nextPgOpen ? 1 : 0,
+        cleanUgMsg,
+        cleanPgMsg,
+        cleanVideoUrl,
+        nextUgUpdatedBy,
+        nextUgUpdatedAt,
+        nextPgUpdatedBy,
+        nextPgUpdatedAt,
+        adminUsername,
+        nowIso
+      );
+
+      // Record audit log entry
+      const changedCategory =
+        ugChanged && pgChanged ? 'BOTH' : ugChanged ? 'UG' : pgChanged ? 'PG' : 'CONFIG';
+
+      activeDb.prepare(`
+        INSERT INTO application_control_audit_logs (
+          category, previous_ug_open, new_ug_open, previous_pg_open, new_pg_open, changed_by, changed_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?)
+      `).run(
+        changedCategory,
+        currentState.ugApplicationOpen ? 1 : 0,
+        nextUgOpen ? 1 : 0,
+        currentState.pgApplicationOpen ? 1 : 0,
+        nextPgOpen ? 1 : 0,
+        adminUsername,
+        nowIso
+      );
+
+      // Also update legacy table for backwards compatibility
+      try {
+        const overallOpen = nextUgOpen || nextPgOpen ? 1 : 0;
+        activeDb.prepare(`
+          UPDATE student_application_status
+          SET is_application_open = ?,
+              status_label = ?,
+              video_url = ?,
+              updated_by_username = ?,
+              updated_at = ?
+          WHERE id = 'MIT_STUDENT_APP_MASTER_SWITCH'
+        `).run(
+          overallOpen,
+          overallOpen ? 'Application ON' : 'Application OFF',
+          cleanVideoUrl,
+          adminUsername,
+          nowIso
+        );
+      } catch (_) {}
+
+      const updatedState = getUgPgControlState(activeDb);
+      broadcastUgPgChange(updatedState);
+
+      return res.json({
+        success: true,
+        message: `Application Controls Saved: UG Application is ${
+          updatedState.ugStatusLabel
+        } | PG Application is ${
+          updatedState.pgStatusLabel
+        }. Existing student registrations, UTRs, and payments remain untouched.`,
+        controller: updatedState
+      });
+    } catch (err) {
+      return res.status(500).json({ success: false, message: err.message });
+    }
+  });
+
+  // ==========================================================================
+  // 4. ADMIN ENDPOINT: UPLOAD OR UPDATE THE OFF-SCREEN VIDEO FILE
+  // ==========================================================================
+  router.post(
+    '/admin/application-controller/upload-video',
+    requireAdminJwt,
+    uploadOffVideo.single('videoFile'),
+    (req, res) => {
+      try {
+        if (!req.file) {
+          return res.status(400).json({
+            success: false,
+            message: 'Please select a valid video file (MP4, WebM, MOV).'
+          });
+        }
+
+        const activeDb = typeof getDbInstance === 'function' ? getDbInstance() : getDbInstance;
+        const adminUsername = req.admin?.username || req.admin?.name || 'Administrator';
+        const newVideoUrl = `/uploads/system/videos/${req.file.filename}`;
+        const nowIso = new Date().toISOString();
+
+        activeDb.prepare(`
+          UPDATE application_category_controls
+          SET video_url = ?,
+              updated_by = ?,
+              updated_at = ?
+          WHERE id = 'MIT_UG_PG_MASTER_CONTROL'
+        `).run(newVideoUrl, adminUsername, nowIso);
+
+        try {
+          activeDb.prepare(`
+            UPDATE student_application_status
+            SET video_url = ?,
+                updated_by_username = ?,
+                updated_at = ?
+            WHERE id = 'MIT_STUDENT_APP_MASTER_SWITCH'
+          `).run(newVideoUrl, adminUsername, nowIso);
+        } catch (_) {}
+
+        const updatedState = getUgPgControlState(activeDb);
+        broadcastUgPgChange(updatedState);
+
+        return res.json({
+          success: true,
+          message: 'Application video uploaded and configured successfully.',
+          videoUrl: newVideoUrl,
+          controller: updatedState
+        });
+      } catch (err) {
+        return res.status(500).json({ success: false, message: err.message });
+      }
+    }
+  );
+
+  return router;
+}
+
+const defaultRouter = createApplicationControlRouter(() => db);
+export default defaultRouter;

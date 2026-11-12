@@ -27,6 +27,8 @@ import adminAuthRoutes, { ensureInitialAdminSeeded } from './adminAuthRoutes.js'
 import adminDataMaintenanceRoutes from './adminDataMaintenanceRoutes.js';
 import applicationControlRoutes from './applicationControlRoutes.js';
 import { requireStudentAppOpen } from './middleware/requireStudentAppOpen.js';
+import { initUgPgControlTables } from './config/ugPgApplicationStatusDb.js';
+import { createUgPgEnforcementMiddleware } from './middleware/enforceUgPgAccess.js';
 import { validateUsnAndDepartmentOnBackend } from './middleware/validateUsnDepartment.js';
 import { sqliteRamCacheMiddleware } from './middleware/sqliteRamCache.js';
 
@@ -36,6 +38,7 @@ const __dirname = path.dirname(__filename);
 // Initialize SQLite database and schema
 const { campaignId: defaultCampaignId } = initSchema();
 ensureInitialAdminSeeded();
+initUgPgControlTables(db);
 
 const app = express();
 const port = process.env.PORT || 4000;
@@ -101,10 +104,11 @@ app.use('/uploads/payments/screenshots', (req, res, next) => {
 // 1. Mount Application Status & Admin Application Controller routes first
 app.use('/api', applicationControlRoutes);
 
-// 2. Enforce Application ON/OFF guard on all Student APIs (Admin & Vendor APIs are automatically exempted inside requireStudentAppOpen)
+// 2. Enforce Independent UG & PG Access Rules on student registration and payment submission APIs
+// (Check Payment Status, Vendor Portal, and Admin Panel automatically pass through)
 app.use(
   ['/api/payments', '/api/tracking', '/api/student', '/api/registrations'],
-  requireStudentAppOpen
+  createUgPgEnforcementMiddleware(() => db)
 );
 
 // Mount Direct UPI Payment & Admin Payment Controller APIs

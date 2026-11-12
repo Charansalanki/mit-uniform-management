@@ -1,9 +1,43 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, createContext, useContext, useRef } from 'react';
 import { useRealtimeSystemSync } from '../../hooks/useRealtimeSystemSync';
+import { parseAndValidateMitUsn } from '../../utils/usnDepartmentValidator';
+import CheckPaymentStatusPortal from './CheckPaymentStatusPortal';
 import { MIT_SEAL_LOGO_BASE64 } from '../../utils/mitLogoBase64';
+import { Search, ShieldCheck, AlertCircle, Volume2, VolumeX, RotateCcw } from 'lucide-react';
 
-const DEFAULT_FALLBACK_TEXT =
-  'The application is temporarily unavailable. Please check back later.';
+export interface CategoryCheckResult {
+  isOpen: boolean;
+  category: 'UG' | 'PG';
+  message: string;
+}
+
+export interface UgPgStatusContextType {
+  ugApplicationOpen: boolean;
+  pgApplicationOpen: boolean;
+  bothClosed: boolean;
+  bothOpen: boolean;
+  isApplicationOpen: boolean;
+  ugClosedMessage: string;
+  pgClosedMessage: string;
+  videoUrl: string;
+  isCategoryOpenForStudent: (params: { usn?: string; course?: string; educationLevel?: string }) => CategoryCheckResult;
+  openStatusCheck: () => void;
+}
+
+const UgPgStatusContext = createContext<UgPgStatusContextType>({
+  ugApplicationOpen: true,
+  pgApplicationOpen: true,
+  bothClosed: false,
+  bothOpen: true,
+  isApplicationOpen: true,
+  ugClosedMessage: 'Undergraduate (B.E. / B.Tech.) uniform registration and new payment submissions are currently closed.',
+  pgClosedMessage: 'Postgraduate (MBA / MCA / M.Tech.) uniform registration and new payment submissions are currently closed.',
+  videoUrl: '/assets/video/application-closed.mp4',
+  isCategoryOpenForStudent: () => ({ isOpen: true, category: 'UG', message: '' }),
+  openStatusCheck: () => {}
+});
+
+export const useUgPgApplicationStatus = () => useContext(UgPgStatusContext);
 
 export interface StudentApplicationGateProps {
   apiBaseUrl?: string;
@@ -14,74 +48,99 @@ export default function StudentApplicationGate({
   apiBaseUrl = '',
   children
 }: StudentApplicationGateProps) {
-  const [loadingStatus, setLoadingStatus] = useState(true);
-  const [appStatus, setAppStatus] = useState({
-    isApplicationOpen: true,
-    statusLabel: 'Application ON',
-    videoUrl: '/assets/video/application-closed.mp4',
-    fallbackMessage: DEFAULT_FALLBACK_TEXT
+  const [loading, setLoading] = useState(true);
+  const [showStatusCheckModal, setShowStatusCheckModal] = useState(false);
+
+  const [statusState, setStatusState] = useState({
+    ugApplicationOpen: true,
+    pgApplicationOpen: true,
+    ugClosedMessage:
+      'Undergraduate (B.E. / B.Tech.) uniform registration and new payment submissions are currently closed.',
+    pgClosedMessage:
+      'Postgraduate (MBA / MCA / M.Tech.) uniform registration and new payment submissions are currently closed.',
+    videoUrl: '/assets/video/application-closed.mp4'
   });
 
   const [isMuted, setIsMuted] = useState(true);
   const [videoLoadError, setVideoLoadError] = useState(false);
-  const [isPlaying, setIsPlaying] = useState(true);
   const videoRef = useRef<HTMLVideoElement | null>(null);
 
-  // Fetch authoritative ON/OFF state from database
-  const fetchApplicationStatus = useCallback(async () => {
+  const fetchUgPgStatus = useCallback(async () => {
     try {
       const res = await fetch(
         `${apiBaseUrl}/api/application-status?t=${Date.now()}`,
         { cache: 'no-store' }
       );
       const data = await res.json();
-      if (data && typeof data.isApplicationOpen === 'boolean') {
-        setAppStatus((prev) => {
-          if (prev.videoUrl !== data.videoUrl) {
-            setVideoLoadError(false);
-          }
-          return {
-            isApplicationOpen: data.isApplicationOpen,
-            statusLabel: data.statusLabel || (data.isApplicationOpen ? 'Application ON' : 'Application OFF'),
-            videoUrl: data.videoUrl || '/assets/video/application-closed.mp4',
-            fallbackMessage: data.fallbackMessage || DEFAULT_FALLBACK_TEXT
-          };
+      if (data && data.success) {
+        setStatusState({
+          ugApplicationOpen: Boolean(data.ugApplicationOpen),
+          pgApplicationOpen: Boolean(data.pgApplicationOpen),
+          ugClosedMessage:
+            data.ugClosedMessage ||
+            'Undergraduate (B.E. / B.Tech.) uniform registration is currently closed.',
+          pgClosedMessage:
+            data.pgClosedMessage ||
+            'Postgraduate (MBA / MCA / M.Tech.) uniform registration is currently closed.',
+          videoUrl: data.videoUrl || '/assets/video/application-closed.mp4'
         });
       }
     } catch (err) {
-      console.error('Error checking student application status:', err);
+      console.error('Error fetching UG/PG application status:', err);
     } finally {
-      setLoadingStatus(false);
+      setLoading(false);
     }
   }, [apiBaseUrl]);
 
   useEffect(() => {
-    fetchApplicationStatus();
-  }, [fetchApplicationStatus]);
+    fetchUgPgStatus();
+  }, [fetchUgPgStatus]);
 
-  // Real-time synchronization via SSE & database syncVersion polling
   useRealtimeSystemSync({
     apiBaseUrl,
     pollIntervalMs: 4000,
-    onSyncTrigger: () => {
-      fetchApplicationStatus();
-    }
+    onSyncTrigger: fetchUgPgStatus
   });
 
-  // Trigger continuous autoplay loop whenever application is OFF
-  useEffect(() => {
-    if (!appStatus.isApplicationOpen && videoRef.current && !videoLoadError) {
-      videoRef.current.muted = true;
-      videoRef.current.loop = true;
-      setIsMuted(true);
-      const playPromise = videoRef.current.play();
-      if (playPromise !== undefined) {
-        playPromise
-          .then(() => setIsPlaying(true))
-          .catch(() => setIsPlaying(false));
+  // Helper exposed to child registration forms to check if the student's detected USN/Course category is open
+  const isCategoryOpenForStudent = useCallback(
+    ({ usn = '', course = '', educationLevel = '' }: { usn?: string; course?: string; educationLevel?: string } = {}): CategoryCheckResult => {
+      let category: 'UG' | 'PG' = 'UG';
+
+      if (usn) {
+        const parsed = parseAndValidateMitUsn(usn);
+        if (parsed.isValid && parsed.educationLevel) {
+          category = parsed.educationLevel as 'UG' | 'PG';
+        }
+      } else if (
+        ['MBA', 'MCA', 'M.TECH.'].includes(String(course).toUpperCase().trim()) ||
+        String(educationLevel).toUpperCase().trim() === 'PG'
+      ) {
+        category = 'PG';
       }
-    }
-  }, [appStatus.isApplicationOpen, appStatus.videoUrl, videoLoadError]);
+
+      if (category === 'UG' && !statusState.ugApplicationOpen) {
+        return {
+          isOpen: false,
+          category: 'UG',
+          message: statusState.ugClosedMessage
+        };
+      }
+      if (category === 'PG' && !statusState.pgApplicationOpen) {
+        return {
+          isOpen: false,
+          category: 'PG',
+          message: statusState.pgClosedMessage
+        };
+      }
+      return { isOpen: true, category, message: '' };
+    },
+    [statusState]
+  );
+
+  const bothClosed = !statusState.ugApplicationOpen && !statusState.pgApplicationOpen;
+  const bothOpen = statusState.ugApplicationOpen && statusState.pgApplicationOpen;
+  const isApplicationOpen = statusState.ugApplicationOpen || statusState.pgApplicationOpen;
 
   const handleToggleSound = (e?: React.MouseEvent) => {
     e?.stopPropagation();
@@ -98,78 +157,56 @@ export default function StudentApplicationGate({
     e?.stopPropagation();
     if (!videoRef.current) return;
     videoRef.current.currentTime = 0;
-    videoRef.current
-      .play()
-      .then(() => setIsPlaying(true))
-      .catch(() => {});
+    videoRef.current.play().catch(() => {});
   };
 
-  if (loadingStatus) {
+  if (loading) {
     return (
-      <div className="min-h-screen bg-slate-950 flex items-center justify-center text-slate-300 text-xs font-semibold">
-        Loading MIT Mysore Uniform Portal...
+      <div className="min-h-screen bg-slate-950 flex items-center justify-center text-slate-300 text-xs font-bold">
+        <div className="flex items-center gap-2">
+          <span className="w-2.5 h-2.5 rounded-full bg-blue-500 animate-ping" />
+          <span>Loading MIT Mysore Uniform Portal...</span>
+        </div>
+      </div>
+    );
+  }
+
+  // Always allow existing registered students to check their application & payment status
+  if (showStatusCheckModal) {
+    return (
+      <div className="min-h-screen bg-slate-50 py-6 px-4">
+        <div className="max-w-4xl mx-auto mb-4">
+          <button
+            type="button"
+            onClick={() => setShowStatusCheckModal(false)}
+            className="px-4 py-2 bg-white text-slate-700 text-xs font-black rounded-xl border border-slate-200 shadow-xs hover:bg-slate-50 flex items-center gap-1.5 cursor-pointer"
+          >
+            ← Back to Uniform Portal Home
+          </button>
+        </div>
+        <CheckPaymentStatusPortal
+          apiBaseUrl={apiBaseUrl}
+          onBackToHome={() => setShowStatusCheckModal(false)}
+        />
       </div>
     );
   }
 
   // ==========================================================================
-  // STATE A: APPLICATION ON -> Render Normal Student Application Unchanged
+  // CASE 1: BOTH UG AND PG ARE OFF -> Professional Closed Page + Status Lookup Button
   // ==========================================================================
-  if (appStatus.isApplicationOpen) {
-    return <>{children}</>;
-  }
+  if (bothClosed) {
+    const resolvedVideoSrc = statusState.videoUrl?.startsWith('http')
+      ? statusState.videoUrl
+      : statusState.videoUrl?.startsWith('/uploads/')
+      ? `${apiBaseUrl}${statusState.videoUrl}`
+      : statusState.videoUrl || '/assets/video/application-closed.mp4';
 
-  // Resolve full video source URL
-  const resolvedVideoSrc = appStatus.videoUrl?.startsWith('http')
-    ? appStatus.videoUrl
-    : appStatus.videoUrl?.startsWith('/uploads/')
-    ? `${apiBaseUrl}${appStatus.videoUrl}`
-    : appStatus.videoUrl || '/assets/video/application-closed.mp4';
-
-  // ==========================================================================
-  // STATE B: APPLICATION OFF -> Unified Immersive Full-Screen Looping Video
-  // ==========================================================================
-  return (
-    <div
-      className="fixed inset-0 w-screen h-screen bg-black text-white overflow-hidden flex items-center justify-center select-none z-[999999]"
-      style={{
-        position: 'fixed',
-        top: 0,
-        left: 0,
-        right: 0,
-        bottom: 0,
-        width: '100vw',
-        height: '100vh',
-        backgroundColor: '#000000',
-        zIndex: 999999
-      }}
-    >
-      {!videoLoadError ? (
-        <div className="relative w-full h-full flex items-center justify-center overflow-hidden bg-black">
-          {/* Main Full-Stage Looping Video */}
-          <video
-            ref={videoRef}
-            src={resolvedVideoSrc}
-            autoPlay
-            muted
-            loop
-            playsInline
-            onPlay={() => setIsPlaying(true)}
-            onEnded={() => {
-              // Redundant loop safety for older mobile browsers
-              if (videoRef.current) {
-                videoRef.current.currentTime = 0;
-                videoRef.current.play().catch(() => {});
-              }
-            }}
-            onError={() => setVideoLoadError(true)}
-            onClick={() => handleToggleSound()}
-            className="w-full h-full object-contain max-h-screen cursor-pointer"
-            title="Click video to toggle sound"
-          />
-
-          {/* Top Floating Institutional Badge (Integrated Glass Pill) */}
-          <div className="absolute top-5 left-1/2 -translate-x-1/2 z-30 flex items-center gap-2.5 px-4 py-2 rounded-full bg-slate-950/80 backdrop-blur-md border border-white/10 shadow-2xl pointer-events-none">
+    return (
+      <div className="min-h-screen bg-slate-950 text-white flex flex-col items-center justify-center p-4">
+        <div className="max-w-xl w-full bg-slate-900 border border-slate-800 rounded-3xl p-8 text-center space-y-6 shadow-2xl relative overflow-hidden">
+          {/* Top Brand Pill */}
+          <div className="flex items-center justify-center gap-2.5">
             <img
               src="/logo.png"
               onError={(e) => {
@@ -179,64 +216,146 @@ export default function StudentApplicationGate({
                 }
               }}
               alt="MIT Mysore"
-              className="w-5 h-5 rounded-full object-contain bg-white/10 p-0.5"
+              className="w-8 h-8 rounded-full object-contain bg-white/10 p-1"
             />
-            <span className="text-xs font-extrabold text-white tracking-wide">
-              MIT Mysore Uniform Portal
-            </span>
-            <span className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse" />
-            <span className="text-[11px] font-bold text-amber-300">
-              Notice Active
-            </span>
-          </div>
-
-          {/* Bottom Floating Glass Controls (Seamless Floating Bar) */}
-          <div className="absolute bottom-6 left-1/2 -translate-x-1/2 z-30 flex flex-wrap items-center justify-center gap-3 px-5 py-2.5 rounded-2xl bg-slate-950/85 backdrop-blur-md border border-white/15 shadow-2xl">
-            {/* Visible Sound Control Button */}
-            <button
-              type="button"
-              onClick={(e) => handleToggleSound(e)}
-              className={`px-4 py-2 rounded-xl text-xs font-extrabold flex items-center gap-2 transition shadow-md cursor-pointer ${
-                isMuted
-                  ? 'bg-amber-500 hover:bg-amber-400 text-slate-950 ring-2 ring-amber-400/50'
-                  : 'bg-emerald-600 hover:bg-emerald-500 text-white ring-2 ring-emerald-400/50'
-              }`}
-            >
-              <span className="text-sm">{isMuted ? '🔇' : '🔊'}</span>
-              <span>{isMuted ? 'Tap to Unmute Audio' : 'Sound ON (Mute)'}</span>
-            </button>
-
-            {/* Visible Replay Button */}
-            <button
-              type="button"
-              onClick={(e) => handleReplayVideo(e)}
-              className="px-4 py-2 rounded-xl bg-slate-800/90 hover:bg-slate-700 text-white text-xs font-bold border border-white/15 flex items-center gap-1.5 transition cursor-pointer shadow-md"
-            >
-              <span>↻</span>
-              <span>Replay</span>
-            </button>
-
-            {/* Live Continuous Loop Pill */}
-            <div className="hidden sm:flex items-center gap-1.5 pl-2 border-l border-white/15 text-[11px] text-slate-300 font-medium">
-              <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping" />
-              <span>Continuous Loop</span>
+            <div className="text-left">
+              <div className="text-xs font-black tracking-wide text-white uppercase">
+                Maharaja Institute of Technology Mysore
+              </div>
+              <div className="text-[10px] text-slate-400 font-medium">
+                Official Uniform Management Portal
+              </div>
             </div>
           </div>
-        </div>
-      ) : (
-        /* Professional Fallback Message if Video Fails to Load */
-        <div className="w-full max-w-lg mx-4 bg-slate-900/95 border border-slate-800 rounded-2xl p-8 text-center space-y-4 shadow-2xl backdrop-blur-md">
-          <div className="w-14 h-14 rounded-full bg-amber-500/10 border border-amber-400/30 text-amber-400 flex items-center justify-center mx-auto text-2xl font-bold">
-            !
+
+          <div className="space-y-2">
+            <span className="inline-block px-3.5 py-1 rounded-full text-xs font-black uppercase tracking-wider bg-rose-500/20 text-rose-300 border border-rose-500/30">
+              UG: CLOSED • PG: CLOSED
+            </span>
+            <h1 className="text-2xl font-black text-white tracking-tight">
+              Uniform Registration Is Currently Closed
+            </h1>
+            <p className="text-xs text-slate-300 max-w-md mx-auto leading-relaxed">
+              Both Undergraduate (B.E. / B.Tech.) and Postgraduate (MBA / MCA / M.Tech.) uniform registrations and new payment submissions are currently closed by the college administration.
+            </p>
           </div>
-          <h2 className="text-lg font-bold text-white">
-            {appStatus.fallbackMessage || DEFAULT_FALLBACK_TEXT}
-          </h2>
-          <p className="text-xs text-slate-400 leading-relaxed">
-            Please contact the Maharaja Institute of Technology Mysore Uniform Administration Desk for assistance.
-          </p>
+
+          {/* Optional notice video */}
+          {!videoLoadError && statusState.videoUrl && (
+            <div className="rounded-2xl overflow-hidden border border-slate-800 bg-black relative max-h-56">
+              <video
+                ref={videoRef}
+                src={resolvedVideoSrc}
+                autoPlay
+                muted={isMuted}
+                loop
+                playsInline
+                onError={() => setVideoLoadError(true)}
+                className="w-full h-full object-cover max-h-56 cursor-pointer"
+                onClick={handleToggleSound}
+              />
+              <div className="absolute bottom-2 right-2 flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={handleToggleSound}
+                  className="px-2.5 py-1 rounded-lg bg-black/70 backdrop-blur-md text-white text-[10px] font-bold border border-white/20 flex items-center gap-1 cursor-pointer"
+                >
+                  {isMuted ? <VolumeX size={12} /> : <Volume2 size={12} />}
+                  <span>{isMuted ? 'Unmute' : 'Mute'}</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={handleReplayVideo}
+                  className="p-1 rounded-lg bg-black/70 backdrop-blur-md text-white text-[10px] font-bold border border-white/20 cursor-pointer"
+                >
+                  <RotateCcw size={12} />
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* Existing Student Status Lookup Card */}
+          <div className="p-5 rounded-2xl bg-slate-850 border border-slate-800 text-xs text-slate-300 space-y-3.5 text-left">
+            <div className="flex items-center gap-2">
+              <ShieldCheck size={18} className="text-emerald-400 shrink-0" />
+              <div className="font-bold text-white text-sm">
+                Already Registered? Check Your Application & Payment Status
+              </div>
+            </div>
+            <p className="text-xs text-slate-400 leading-relaxed">
+              Existing students can check their registration details, selected sizes, and live payment verification status anytime using their Application ID and 6-Digit PIN. No data has been erased.
+            </p>
+            <button
+              type="button"
+              onClick={() => setShowStatusCheckModal(true)}
+              className="w-full py-3 bg-blue-600 hover:bg-blue-500 text-white font-black text-xs rounded-xl shadow-md transition-all flex items-center justify-center gap-2 cursor-pointer"
+            >
+              <Search size={14} />
+              <span>Check Application & Payment Status</span>
+            </button>
+          </div>
+
+          <div className="text-[11px] text-slate-500">
+            For urgent uniform inquiries, contact the MIT Mysore Administration Desk.
+          </div>
         </div>
-      )}
-    </div>
+      </div>
+    );
+  }
+
+  // ==========================================================================
+  // CASE 2: AT LEAST ONE CATEGORY (UG OR PG) IS ON
+  // ==========================================================================
+  return (
+    <UgPgStatusContext.Provider
+      value={{
+        ...statusState,
+        bothClosed,
+        bothOpen,
+        isApplicationOpen,
+        isCategoryOpenForStudent,
+        openStatusCheck: () => setShowStatusCheckModal(true)
+      }}
+    >
+      {/* Top Live UG / PG Availability Strip */}
+      <div className="bg-slate-900 text-white px-4 py-2.5 border-b border-slate-800 sticky top-0 z-40 shadow-xs">
+        <div className="max-w-5xl mx-auto flex flex-wrap items-center justify-between gap-3 text-xs">
+          <div className="flex flex-wrap items-center gap-2 sm:gap-3">
+            <span className="font-bold text-slate-400 text-[11px] uppercase tracking-wider">
+              Portal Status:
+            </span>
+            <span
+              className={`px-2.5 py-0.5 rounded-full text-[11px] font-black border transition-all ${
+                statusState.ugApplicationOpen
+                  ? 'bg-emerald-500/20 text-emerald-300 border-emerald-400/30'
+                  : 'bg-rose-500/20 text-rose-300 border-rose-400/30'
+              }`}
+            >
+              UG (B.E./B.Tech.): {statusState.ugApplicationOpen ? 'OPEN' : 'CLOSED'}
+            </span>
+            <span
+              className={`px-2.5 py-0.5 rounded-full text-[11px] font-black border transition-all ${
+                statusState.pgApplicationOpen
+                  ? 'bg-emerald-500/20 text-emerald-300 border-emerald-400/30'
+                  : 'bg-rose-500/20 text-rose-300 border-rose-400/30'
+              }`}
+            >
+              PG (MBA/MCA): {statusState.pgApplicationOpen ? 'OPEN' : 'CLOSED'}
+            </span>
+          </div>
+
+          <button
+            type="button"
+            onClick={() => setShowStatusCheckModal(true)}
+            className="text-blue-400 hover:text-blue-300 font-black text-xs flex items-center gap-1.5 transition-colors cursor-pointer group"
+          >
+            <Search size={13} className="text-blue-400 group-hover:scale-110 transition-transform" />
+            <span className="underline underline-offset-2">Check Existing Application / Payment Status</span>
+          </button>
+        </div>
+      </div>
+
+      {children}
+    </UgPgStatusContext.Provider>
   );
 }
