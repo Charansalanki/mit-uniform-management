@@ -34,6 +34,16 @@ export default defineConfig({
         schedules: resolve(__dirname, 'schedules.html'),
         navigation: resolve(__dirname, 'navigation.html'),
         vendor: resolve(__dirname, 'vendor-portal.html')
+      },
+      output: {
+        manualChunks(id) {
+          if (id.includes('node_modules/react') || id.includes('node_modules/react-dom')) {
+            return 'vendor-react';
+          }
+          if (id.includes('node_modules/lucide-react')) {
+            return 'vendor-icons';
+          }
+        }
       }
     }
   }

@@ -21,6 +21,12 @@ export function useRealtimeSystemSync({
     let isMounted = true;
 
     const checkDatabaseSyncVersion = async () => {
+      // Battery & CPU optimization for low-end mobile devices: don't poll while screen is off or tab hidden
+      if (typeof document !== 'undefined' && document.hidden) return;
+
+      // If active SSE stream is already open, skip background polling to save CPU cycles
+      if (es && es.readyState === EventSource.OPEN && Math.random() > 0.15) return;
+
       try {
         const urlPrefix = apiBaseUrl ? apiBaseUrl.replace(/\/$/, '') : '';
         const res = await fetch(`${urlPrefix}/api/sync/version?t=${Date.now()}`, {

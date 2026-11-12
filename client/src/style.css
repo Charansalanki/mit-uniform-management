@@ -2936,7 +2936,7 @@ footer {
 
 /* ── Hero banner with Natural MIT Campus Background ── */
 .portal-hero {
-  background: 
+  background:
     linear-gradient(180deg, rgba(0, 0, 0, 0.35) 0%, rgba(0, 0, 0, 0.15) 50%, rgba(0, 0, 0, 0.45) 100%),
     url('/mit-campus.jpg') center 28% / cover no-repeat;
   padding: 3.8rem 1.5rem 4.8rem;
@@ -4556,8 +4556,13 @@ footer {
 }
 
 @keyframes tableSpin {
-  from { transform: rotate(0deg); }
-  to { transform: rotate(360deg); }
+  from {
+    transform: rotate(0deg);
+  }
+
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 .prod-status-badge {
@@ -4660,6 +4665,7 @@ footer {
     grid-template-columns: 1fr !important;
     gap: 20px !important;
   }
+
   .from-point-card {
     grid-template-columns: 1fr !important;
   }
@@ -4670,7 +4676,8 @@ footer {
    ========================================================================== */
 
 /* 1. Global Viewport & Container Containment */
-html, body {
+html,
+body {
   max-width: 100vw !important;
   overflow-x: hidden !important;
   -webkit-text-size-adjust: 100%;
@@ -4678,19 +4685,25 @@ html, body {
   -moz-osx-font-smoothing: grayscale;
 }
 
-#root, .app, .portal-container {
+#root,
+.app,
+.portal-container {
   max-width: 100vw;
   overflow-x: hidden;
 }
 
 /* Media element safety: never break out of containers */
-img, svg, video, canvas {
+img,
+svg,
+video,
+canvas {
   max-width: 100%;
   height: auto;
 }
 
 /* 2. iOS Safari Form Input Zoom Prevention */
 @media (max-width: 768px) {
+
   input[type="text"],
   input[type="number"],
   input[type="email"],
@@ -4704,7 +4717,9 @@ img, svg, video, canvas {
 }
 
 /* 3. Universal Touch Targets & Mobile Ergonomics */
-@media (pointer: coarse), (max-width: 768px) {
+@media (pointer: coarse),
+(max-width: 768px) {
+
   button,
   .btn,
   .sub-nav-tab,
@@ -4753,8 +4768,11 @@ div[style*="overflowX: auto"]::-webkit-scrollbar-thumb {
 
 /* 5. Breakpoint: Small Mobile & Foldable Covers (320px - 480px) */
 @media (max-width: 480px) {
+
   /* Main padding */
-  .main, .admin-content, .portal-body {
+  .main,
+  .admin-content,
+  .portal-body {
     padding: 12px 10px !important;
   }
 
@@ -4787,8 +4805,8 @@ div[style*="overflowX: auto"]::-webkit-scrollbar-thumb {
   }
 
   /* Modals full-width on tiny screens */
-  div[style*="position: fixed"] > div,
-  div[style*="position: fixed"] > form {
+  div[style*="position: fixed"]>div,
+  div[style*="position: fixed"]>form {
     width: 96vw !important;
     max-height: 94vh !important;
     padding: 14px !important;
@@ -4850,9 +4868,56 @@ div[style*="overflowX: auto"]::-webkit-scrollbar-thumb {
 
 /* 8. Breakpoint: Ultrawide & 4K Displays (> 1920px) */
 @media (min-width: 1921px) {
-  .app, .main, .portal-container {
+
+  .app,
+  .main,
+  .portal-container {
     max-width: 1800px !important;
     margin-left: auto !important;
     margin-right: auto !important;
+  }
+}
+
+/* ==========================================================================
+   LOW-END DEVICE HARDWARE ACCELERATION & ZERO-LATENCY TOUCH REACTION
+   ========================================================================== */
+*, *::before, *::after {
+  -webkit-tap-highlight-color: transparent;
+}
+
+html {
+  -webkit-text-size-adjust: 100%;
+  text-rendering: optimizeSpeed;
+}
+
+body {
+  touch-action: manipulation;
+  overscroll-behavior-y: none;
+}
+
+/* Fast scrolling & off-screen rendering optimization for mobile devices */
+.table-responsive,
+.registrations-table-container,
+.queue-table-wrapper,
+.vendor-portal-table {
+  contain: layout style;
+  will-change: scroll-position;
+  -webkit-overflow-scrolling: touch;
+}
+
+tr, .schedule-card, .vendor-card, .student-card {
+  content-visibility: auto;
+  contain-intrinsic-size: 60px;
+}
+
+/* Eliminate GPU-intensive blur effects on low-end mobile devices for smooth 60 FPS */
+@media (max-width: 768px), (prefers-reduced-motion: reduce) {
+  .backdrop-blur-md,
+  .backdrop-blur-sm,
+  .backdrop-blur-lg,
+  .backdrop-blur {
+    backdrop-filter: none !important;
+    -webkit-backdrop-filter: none !important;
+    background-color: rgba(15, 23, 42, 0.96) !important;
   }
 }

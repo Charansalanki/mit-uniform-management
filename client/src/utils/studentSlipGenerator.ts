@@ -1,8 +1,6 @@
 // Utility to generate a pixel-perfect, 100% Single-Page A4 Student Uniform Registration & Payment Slip
 // Matches the official MIT Mysore layout with absolute single-page enforcement.
 
-import jsPDF from 'jspdf';
-import html2canvas from 'html2canvas';
 import DOMPurify from 'dompurify';
 import { MIT_LOGO_BASE64 } from './mitLogoBase64';
 
@@ -625,6 +623,12 @@ export async function downloadStudentSlip(
   }
 
   try {
+    // Dynamically import heavy PDF engines only on user demand (saves ~550KB on initial page load for low-end mobile devices)
+    const [{ default: html2canvas }, { default: jsPDF }] = await Promise.all([
+      import('html2canvas'),
+      import('jspdf')
+    ]);
+
     const canvas = await html2canvas(elementToCapture, {
       scale: 2, // 2x retina DPI for razor-sharp typography and borders
       useCORS: true,
