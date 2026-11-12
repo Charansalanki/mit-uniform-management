@@ -1,4 +1,16 @@
 import React, { useState, useEffect, useCallback } from 'react';
+import {
+  Power,
+  Check,
+  X,
+  Loader2,
+  Video,
+  Upload,
+  Save,
+  History,
+  ShieldCheck,
+  AlertCircle
+} from 'lucide-react';
 
 export interface AdminApplicationControllerProps {
   apiBaseUrl?: string;
@@ -165,65 +177,97 @@ export default function AdminApplicationController({
   return (
     <div className="space-y-6">
       {/* Main Application Controller Card */}
-      <div className="bg-white rounded-xl border border-slate-200 shadow-xs p-6 space-y-5">
-        <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 border-b border-slate-100 pb-5">
-          <div>
-            <span className="text-xs font-extrabold uppercase tracking-wider text-blue-600">
+      <div className="bg-white rounded-2xl border border-slate-200/90 shadow-xs p-6 space-y-6">
+        <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-5 border-b border-slate-100 pb-6">
+          <div className="space-y-1">
+            <span className="text-[11px] font-extrabold uppercase tracking-wider text-blue-600 bg-blue-50 px-2.5 py-0.5 rounded-md border border-blue-200/60">
               Admin Panel → Application Controller
             </span>
-            <h2 className="text-xl font-extrabold text-slate-900 mt-0.5">
+            <h2 className="text-xl font-extrabold text-slate-900 tracking-tight">
               Application Controller
             </h2>
-            <p className="text-xs text-slate-500 mt-0.5 max-w-2xl leading-relaxed">
+            <p className="text-xs text-slate-500 max-w-xl leading-relaxed">
               Master switch controlling student access to the MIT Mysore Uniform Registration Portal. All existing registrations, UTRs, and payments remain preserved in both states.
             </p>
           </div>
 
-          {/* Current Status Badge & Toggle Switch */}
-          <div className="flex items-center gap-4 bg-slate-50 p-4 rounded-xl border border-slate-200">
-            <div>
-              <div className="text-[11px] font-bold uppercase text-slate-500">
-                Current Status
-              </div>
+          {/* Master Control Card */}
+          <div className="flex items-center gap-3.5 bg-slate-50 p-2.5 sm:p-3 rounded-2xl border border-slate-200/80 shadow-xs shrink-0">
+            {/* Status indicator with beacon */}
+            <div className="flex items-center gap-2.5 px-2">
               <div
-                className={`text-base font-extrabold flex items-center gap-2 mt-0.5 ${
-                  isOn ? 'text-emerald-700' : 'text-red-600'
+                className={`w-9 h-9 rounded-xl flex items-center justify-center transition-all ${
+                  isOn
+                    ? 'bg-emerald-500/10 text-emerald-600 border border-emerald-500/20'
+                    : 'bg-rose-500/10 text-rose-600 border border-rose-500/20'
                 }`}
               >
-                <span
-                  className={`w-2.5 h-2.5 rounded-full ${
-                    isOn ? 'bg-emerald-500 animate-pulse' : 'bg-red-500'
-                  }`}
-                />
-                <span>{isOn ? 'Application ON' : 'Application OFF'}</span>
+                <Power size={18} className={isOn ? 'text-emerald-600' : 'text-rose-600'} />
+              </div>
+              <div>
+                <div className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                  Current Status
+                </div>
+                <div className="flex items-center gap-1.5 mt-0.5 whitespace-nowrap">
+                  <span className="relative flex h-2 w-2">
+                    {isOn && (
+                      <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
+                    )}
+                    <span
+                      className={`relative inline-flex rounded-full h-2 w-2 ${
+                        isOn ? 'bg-emerald-500' : 'bg-rose-500'
+                      }`}
+                    />
+                  </span>
+                  <span
+                    className={`text-xs font-extrabold ${
+                      isOn ? 'text-emerald-700' : 'text-rose-700'
+                    }`}
+                  >
+                    {isOn ? 'Active (Open)' : 'Inactive (Closed)'}
+                  </span>
+                </div>
               </div>
             </div>
 
-            {/* Explicit Two-State Toggle Switch */}
-            <div className="flex rounded-xl bg-slate-200 p-1 border border-slate-300">
+            <div className="h-8 w-px bg-slate-200 hidden sm:block" />
+
+            {/* Segmented Controller */}
+            <div className="inline-flex p-1 bg-slate-200/80 rounded-xl border border-slate-300/60 shadow-inner">
               <button
                 type="button"
                 disabled={busy}
                 onClick={() => handleToggleSwitch(true)}
-                className={`px-4 py-2 rounded-lg text-xs font-extrabold transition cursor-pointer ${
+                className={`px-3.5 py-2 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer whitespace-nowrap ${
                   isOn
                     ? 'bg-emerald-600 text-white shadow-xs'
-                    : 'text-slate-700 hover:text-slate-900'
-                }`}
+                    : 'text-slate-600 hover:text-slate-900 hover:bg-slate-200/60'
+                } disabled:opacity-50`}
               >
-                Application ON
+                {busy && isOn ? (
+                  <Loader2 size={13} className="animate-spin text-white" />
+                ) : (
+                  <Check size={13} className={isOn ? 'text-white' : 'text-slate-400'} />
+                )}
+                <span>Portal ON</span>
               </button>
+
               <button
                 type="button"
                 disabled={busy}
                 onClick={() => handleToggleSwitch(false)}
-                className={`px-4 py-2 rounded-lg text-xs font-extrabold transition cursor-pointer ${
+                className={`px-3.5 py-2 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer whitespace-nowrap ${
                   !isOn
-                    ? 'bg-red-600 text-white shadow-xs'
-                    : 'text-slate-700 hover:text-slate-900'
-                }`}
+                    ? 'bg-rose-600 text-white shadow-xs'
+                    : 'text-slate-600 hover:text-slate-900 hover:bg-slate-200/60'
+                } disabled:opacity-50`}
               >
-                Application OFF
+                {busy && !isOn ? (
+                  <Loader2 size={13} className="animate-spin text-white" />
+                ) : (
+                  <X size={13} className={!isOn ? 'text-white' : 'text-slate-400'} />
+                )}
+                <span>Portal OFF</span>
               </button>
             </div>
           </div>
@@ -231,32 +275,44 @@ export default function AdminApplicationController({
 
         {banner.text && (
           <div
-            className={`p-4 rounded-xl border text-xs font-bold ${
+            className={`p-4 rounded-xl border text-xs font-bold flex items-center gap-2 ${
               banner.type === 'error'
                 ? 'bg-red-50 border-red-300 text-red-900'
                 : 'bg-emerald-50 border-emerald-300 text-emerald-900'
             }`}
           >
-            {banner.text}
+            {banner.type === 'error' ? <AlertCircle size={16} /> : <Check size={16} />}
+            <span>{banner.text}</span>
           </div>
         )}
 
         {/* Video & Fallback Configuration */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-1">
-          <div>
-            <label className="block text-xs font-bold text-slate-700 mb-1">
-              Production Video Asset Path / URL (Displayed When Application Is OFF)
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-5 pt-1">
+          <div className="bg-slate-50/60 p-4 rounded-xl border border-slate-200/70">
+            <label className="block text-xs font-bold text-slate-700 mb-1.5 flex items-center gap-1.5">
+              <Video size={14} className="text-blue-600" />
+              <span>Broadcast Video Path / URL (Displayed When Closed)</span>
             </label>
             <input
               type="text"
               value={videoUrlInput}
               onChange={(e) => setVideoUrlInput(e.target.value)}
               placeholder="/assets/video/application-closed.mp4"
-              className="w-full px-3.5 py-2 text-xs font-mono border border-slate-300 rounded-lg"
+              className="w-full px-3.5 py-2 text-xs font-mono bg-white border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none"
             />
-            <div className="mt-2.5 flex flex-wrap items-center gap-2">
-              <label className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-800 rounded-lg border border-slate-300 text-[11px] font-bold cursor-pointer transition">
-                {uploadingVideo ? 'Uploading Video...' : '⬆ Upload / Replace Video File'}
+            <div className="mt-3 flex flex-wrap items-center gap-2">
+              <label className="px-3 py-1.5 bg-white hover:bg-slate-100 text-slate-800 rounded-lg border border-slate-300 text-[11px] font-bold cursor-pointer transition flex items-center gap-1.5 shadow-2xs">
+                {uploadingVideo ? (
+                  <>
+                    <Loader2 size={12} className="animate-spin" />
+                    <span>Uploading Video...</span>
+                  </>
+                ) : (
+                  <>
+                    <Upload size={12} className="text-slate-600" />
+                    <span>Upload Video File</span>
+                  </>
+                )}
                 <input
                   type="file"
                   accept="video/mp4,video/webm,video/quicktime"
@@ -268,28 +324,31 @@ export default function AdminApplicationController({
                 type="button"
                 disabled={busy}
                 onClick={() => handleToggleSwitch(isOn)}
-                className="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-[11px] font-bold transition cursor-pointer disabled:opacity-50"
+                className="px-3.5 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-[11px] font-bold transition cursor-pointer disabled:opacity-50 flex items-center gap-1.5 shadow-2xs"
               >
-                Save Video & Fallback Settings
+                <Save size={12} />
+                <span>Save Settings</span>
               </button>
             </div>
           </div>
 
-          <div>
-            <label className="block text-xs font-bold text-slate-700 mb-1">
-              Fallback Message (If Video Fails to Load)
-            </label>
-            <input
-              type="text"
-              value={fallbackInput}
-              onChange={(e) => setFallbackInput(e.target.value)}
-              className="w-full px-3.5 py-2 text-xs border border-slate-300 rounded-lg"
-            />
-            <p className="text-[11px] text-slate-500 mt-1.5">
-              Last modified by <strong>{controller.updatedByUsername}</strong> on{' '}
-              {controller.updatedAt
-                ? new Date(controller.updatedAt).toLocaleString('en-IN')
-                : 'Initial Setup'}
+          <div className="bg-slate-50/60 p-4 rounded-xl border border-slate-200/70 flex flex-col justify-between">
+            <div>
+              <label className="block text-xs font-bold text-slate-700 mb-1.5 flex items-center gap-1.5">
+                <ShieldCheck size={14} className="text-blue-600" />
+                <span>Fallback Message (If Video Fails to Load)</span>
+              </label>
+              <input
+                type="text"
+                value={fallbackInput}
+                onChange={(e) => setFallbackInput(e.target.value)}
+                className="w-full px-3.5 py-2 text-xs bg-white border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none"
+              />
+            </div>
+            <p className="text-[11px] text-slate-500 mt-2.5 pt-2 border-t border-slate-200/60 flex items-center gap-1.5">
+              <span>Last updated by <strong>{controller.updatedByUsername}</strong></span>
+              <span>•</span>
+              <span>{controller.updatedAt ? new Date(controller.updatedAt).toLocaleString('en-IN') : 'Initial Setup'}</span>
             </p>
           </div>
         </div>
@@ -297,30 +356,34 @@ export default function AdminApplicationController({
 
       {/* Audit History of Application ON/OFF Toggles */}
       {controller.toggleHistory && controller.toggleHistory.length > 0 && (
-        <div className="bg-white rounded-xl border border-slate-200 shadow-xs overflow-hidden">
-          <div className="p-4 border-b border-slate-200">
+        <div className="bg-white rounded-2xl border border-slate-200/90 shadow-xs overflow-hidden">
+          <div className="p-4 border-b border-slate-200 flex items-center gap-2 bg-slate-50/50">
+            <History size={15} className="text-slate-600" />
             <h3 className="text-xs font-bold uppercase tracking-wider text-slate-700">
-              Application Status Change History
+              Application Status Audit Log
             </h3>
           </div>
           <div className="divide-y divide-slate-100 text-xs max-h-48 overflow-y-auto">
             {controller.toggleHistory.map((item, idx) => (
               <div
                 key={idx}
-                className="px-4 py-2.5 flex items-center justify-between"
+                className="px-4 py-2.5 flex items-center justify-between hover:bg-slate-50/60 transition"
               >
-                <div>
-                  <span className="font-semibold text-slate-700">
-                    {item.previousState ? 'Application ON' : 'Application OFF'} →{' '}
+                <div className="flex items-center gap-2">
+                  <span className="font-semibold text-slate-600">
+                    {item.previousState ? 'Portal ON' : 'Portal OFF'} →{' '}
                   </span>
                   <strong
-                    className={
-                      item.newState ? 'text-emerald-700 font-bold' : 'text-red-600 font-bold'
-                    }
+                    className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-bold ${
+                      item.newState
+                        ? 'bg-emerald-50 text-emerald-700 border border-emerald-200/70'
+                        : 'bg-rose-50 text-rose-700 border border-rose-200/70'
+                    }`}
                   >
-                    {item.newState ? 'Application ON' : 'Application OFF'}
+                    {item.newState ? <Check size={11} /> : <X size={11} />}
+                    {item.newState ? 'Portal ON' : 'Portal OFF'}
                   </strong>
-                  <span className="text-slate-500 ml-2">
+                  <span className="text-slate-500 ml-1">
                     by {item.changedByUsername}
                   </span>
                 </div>
