@@ -34,6 +34,7 @@ import AdminApplicationController from './components/admin/AdminApplicationContr
 import { AdminPaymentController, PaymentControllerTab } from './components/AdminPaymentController';
 import { AdminVendorManagement } from './components/AdminVendorManagement';
 import { MIT_SEAL_LOGO_BASE64 } from './utils/mitLogoBase64';
+import { useRealtimeSystemSync } from './hooks/useRealtimeSystemSync';
 
 export interface AppProps {
   adminProfile?: any;
@@ -65,10 +66,10 @@ export default function App({ adminProfile, onLogout }: AppProps = {}) {
   const loadData = async () => {
     try {
       const [campName, regs, schs, sum, payConfig] = await Promise.all([
-        api.getCampaignName(),
-        api.getRegistrations(),
-        api.getSchedules(),
-        api.getSummary(),
+        api.getCampaignName().catch(() => 'Uniform Distribution 2027'),
+        api.getRegistrations().catch(() => []),
+        api.getSchedules().catch(() => []),
+        api.getSummary().catch(() => ({ registered: 0, collected: 0, pending: 0, departments: 0 })),
         api.getAdminPaymentConfig().catch(() => null)
       ]);
       setCampaign(campName);
@@ -77,15 +78,44 @@ export default function App({ adminProfile, onLogout }: AppProps = {}) {
       setSummary(sum || calculateSummary(regs));
       if (payConfig?.stats) {
         setPaymentStats(payConfig.stats);
+      } else {
+        setPaymentStats({
+          totalSubmissions: 0,
+          verifiedPayments: 0,
+          pendingVerification: 0,
+          rejectedPayments: 0,
+          flaggedMismatches: 0,
+          totalVerifiedCollection: 0,
+          activePaymentMethods: 0,
+          pendingByMethod: {}
+        });
       }
     } catch {
       // safe fallback
     }
   };
 
+  // Real-time synchronization: when database changes or sync state increments, auto-reload
+  useRealtimeSystemSync({
+    onSyncInvalidate: () => {
+      loadData();
+    }
+  });
+
   useEffect(() => {
     loadData();
   }, []);
+
+  // Auto-refresh when tab gains focus or on page switch
+  useEffect(() => {
+    const handleFocus = () => loadData();
+    window.addEventListener('focus', handleFocus);
+    return () => window.removeEventListener('focus', handleFocus);
+  }, []);
+
+  useEffect(() => {
+    loadData();
+  }, [page]);
 
   // Update summary whenever registrations change
   const syncSummary = (newRegs: StudentRegistration[]) => {
@@ -150,6 +180,18 @@ export default function App({ adminProfile, onLogout }: AppProps = {}) {
 
   const handleResetData = () => {
     api.resetAllData();
+    setRegistrations([]);
+    setSummary({ registered: 0, collected: 0, pending: 0, departments: 0 });
+    setPaymentStats({
+      totalSubmissions: 0,
+      verifiedPayments: 0,
+      pendingVerification: 0,
+      rejectedPayments: 0,
+      flaggedMismatches: 0,
+      totalVerifiedCollection: 0,
+      activePaymentMethods: 0,
+      pendingByMethod: {}
+    });
     loadData();
     showToast('All records cleared successfully', 'info');
   };
@@ -234,10 +276,12 @@ export default function App({ adminProfile, onLogout }: AppProps = {}) {
         <div className="brand">
           <div className="crest">
             <img
-              src="/logo.png"
+              src="/mit-logo.png"
               onError={(e) => {
                 const target = e.currentTarget;
-                if (!target.src.startsWith('data:')) {
+                if (!target.src.includes('logo.png')) {
+                  target.src = '/logo.png';
+                } else if (!target.src.startsWith('data:')) {
                   target.src = MIT_SEAL_LOGO_BASE64;
                 }
               }}

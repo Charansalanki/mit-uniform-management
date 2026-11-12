@@ -119,3 +119,4 @@ for (const table of tablesToVerify) {
   console.log(`  ${table.padEnd(30)}: ${count} rows`);
 }
 console.log('\n[Done] All uniform data has been erased cleanly. System is ready for fresh registrations.');
+

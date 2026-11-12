@@ -16,6 +16,7 @@ server/.env
 # SQLite runtime files
 server/data/*.db-shm
 server/data/*.db-wal
+server/data/backups/
 
 # Temporary / Scratch
 scratch/

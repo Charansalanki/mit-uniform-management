@@ -155,41 +155,56 @@ app.get('/', (req, res) => {
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>MIT Uniform Management API — Status</title>
+  <title>MIT Mysore – Uniform Management API Service</title>
   <style>
     body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #0f172a; color: #f8fafc; margin: 0; padding: 40px 20px; display: flex; justify-content: center; }
-    .card { background: #1e293b; border: 1px solid #334155; border-radius: 16px; padding: 32px; max-width: 600px; width: 100%; box-shadow: 0 10px 25px rgba(0,0,0,0.3); }
-    .badge { display: inline-flex; align-items: center; gap: 6px; background: rgba(34, 197, 94, 0.15); color: #4ade80; border: 1px solid rgba(74, 222, 128, 0.3); padding: 4px 12px; border-radius: 9999px; font-size: 13px; font-weight: 600; margin-bottom: 16px; }
+    .card { background: #1e293b; border: 1px solid #334155; border-radius: 16px; padding: 32px; max-width: 620px; width: 100%; box-shadow: 0 10px 25px rgba(0,0,0,0.3); }
+    .header-row { display: flex; align-items: center; gap: 16px; margin-bottom: 20px; }
+    .logo-box { width: 52px; height: 52px; background: #ffffff; border-radius: 10px; display: flex; align-items: center; justify-content: center; padding: 4px; box-shadow: 0 2px 8px rgba(0,0,0,0.2); }
+    .logo-box img { width: 100%; height: 100%; object-fit: contain; }
+    .title-group h1 { margin: 0; font-size: 20px; font-weight: 700; color: #ffffff; }
+    .title-group p { margin: 2px 0 0 0; color: #94a3b8; font-size: 13px; }
+    .badge { display: inline-flex; align-items: center; gap: 6px; background: rgba(34, 197, 94, 0.15); color: #4ade80; border: 1px solid rgba(74, 222, 128, 0.3); padding: 4px 12px; border-radius: 9999px; font-size: 12px; font-weight: 600; margin-bottom: 20px; }
     .dot { width: 8px; height: 8px; background: #4ade80; border-radius: 50%; }
-    h1 { margin: 0 0 8px 0; font-size: 22px; font-weight: 700; color: #ffffff; }
-    p { margin: 0 0 24px 0; color: #94a3b8; font-size: 14px; line-height: 1.5; }
-    .grid { display: grid; gap: 12px; margin-bottom: 24px; }
-    .item { background: #0f172a; border: 1px solid #334155; padding: 12px 16px; border-radius: 8px; display: flex; justify-content: space-between; align-items: center; font-size: 13px; }
+    .grid { display: grid; gap: 10px; margin-bottom: 24px; }
+    .item { background: #0f172a; border: 1px solid #334155; padding: 10px 14px; border-radius: 8px; display: flex; justify-content: space-between; align-items: center; font-size: 13px; }
     .item span:first-child { color: #94a3b8; }
     .item span:last-child { color: #f1f5f9; font-weight: 600; font-family: monospace; }
-    .btn { display: inline-flex; align-items: center; justify-content: center; gap: 8px; background: #2563eb; color: #ffffff; text-decoration: none; padding: 10px 20px; border-radius: 8px; font-weight: 600; font-size: 14px; transition: background 0.2s; }
+    .btn { display: inline-flex; align-items: center; justify-content: center; gap: 8px; background: #2563eb; color: #ffffff; text-decoration: none; padding: 9px 16px; border-radius: 8px; font-weight: 600; font-size: 13px; transition: background 0.2s; }
     .btn:hover { background: #1d4ed8; }
     .btn-secondary { background: #334155; }
     .btn-secondary:hover { background: #475569; }
-    .actions { display: flex; flex-wrap: wrap; gap: 10px; }
+    .btn-emerald { background: #059669; }
+    .btn-emerald:hover { background: #047857; }
+    .actions { display: flex; flex-wrap: wrap; gap: 8px; }
   </style>
 </head>
 <body>
   <div class="card">
-    <div class="badge"><div class="dot"></div> Backend API Operational</div>
-    <h1>MIT Uniform Management System</h1>
-    <p>The backend API service is running normally on port 4000 with Node 24 native SQLite database engine in WAL mode.</p>
+    <div class="header-row">
+      <div class="logo-box">
+        <img src="http://localhost:5173/mit-logo.png" onerror="this.src='http://localhost:5173/logo.png'" alt="MIT Mysore Logo" />
+      </div>
+      <div class="title-group">
+        <h1>MIT Mysore Uniform Management System</h1>
+        <p>High-Concurrency Node 24 SQLite Backend Engine (WAL Mode)</p>
+      </div>
+    </div>
+
+    <div class="badge"><div class="dot"></div> Backend API Status: Online & Healthy</div>
     
     <div class="grid">
       <div class="item"><span>Health Endpoint</span><span><a href="/api/health" style="color:#60a5fa;">/api/health</a></span></div>
-      <div class="item"><span>Database Engine</span><span>Node 24 DatabaseSync (WAL)</span></div>
+      <div class="item"><span>Database Engine</span><span>Node 24 DatabaseSync (WAL Mode)</span></div>
       <div class="item"><span>Application Status</span><span><a href="/api/application-status" style="color:#60a5fa;">/api/application-status</a></span></div>
-      <div class="item"><span>Frontend UI Portal</span><span><a href="http://localhost:5173" style="color:#60a5fa;">http://localhost:5173</a></span></div>
+      <div class="item"><span>Port</span><span>4000 (Express & SSE)</span></div>
     </div>
 
     <div class="actions">
-      <a href="http://localhost:5173" class="btn">Open Student Portal &rarr;</a>
-      <a href="/api/health" class="btn btn-secondary">View JSON Health</a>
+      <a href="http://localhost:5173" class="btn">Student Portal &rarr;</a>
+      <a href="http://localhost:5173/admin.html" class="btn btn-emerald">Admin Control Panel &rarr;</a>
+      <a href="http://localhost:5173/vendor-portal.html" class="btn btn-secondary">Vendor Portal &rarr;</a>
+      <a href="/api/health" class="btn btn-secondary">JSON Health Check</a>
     </div>
   </div>
 </body>
@@ -583,9 +598,6 @@ app.get('/api/auth/me', authenticateAdmin, (req, res) => {
 
 // ─── Admin Dashboard Summary (Cached) ──────────────────────────
 app.get('/api/admin/summary', authenticateAdmin, (_req, res) => {
-  const cached = appCache.get('summary:counts');
-  if (cached) return res.json(cached);
-
   try {
     const counts = db.prepare(`
       SELECT
@@ -607,7 +619,6 @@ app.get('/api/admin/summary', authenticateAdmin, (_req, res) => {
       departments: counts?.departments || 0
     };
 
-    appCache.set('summary:counts', summary, 30);
     res.json(summary);
   } catch (err) {
     console.error('Summary error:', err);
