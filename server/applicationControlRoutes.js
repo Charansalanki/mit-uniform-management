@@ -11,6 +11,10 @@ import {
   initUgPgControlTables,
   getUgPgControlState
 } from './config/ugPgApplicationStatusDb.js';
+import {
+  classifyUsnOrCourseCategory,
+  filterStudentFacingUsnRecords
+} from './middleware/enforceUgPgAccess.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -130,6 +134,74 @@ export function createApplicationControlRouter(getDbInstance = () => db) {
         success: false,
         message: 'Unable to retrieve UG/PG application status.'
       });
+    }
+  });
+
+  // ==========================================================================
+  // 1B. STUDENT-FACING USN VERIFICATION / LOOKUP ENDPOINT
+  // Filters out disabled categories without altering SQLite records
+  // ==========================================================================
+  router.get('/student/usn-lookup', (req, res) => {
+    try {
+      const activeDb = typeof getDbInstance === 'function' ? getDbInstance() : getDbInstance;
+      const state = getUgPgControlState(activeDb);
+
+      res.set('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+
+      if (!state.ugApplicationOpen && !state.pgApplicationOpen) {
+        return res.status(503).json({
+          success: false,
+          bothClosed: true,
+          usns: []
+        });
+      }
+
+      const searchUsn = String(req.query.usn || '').toUpperCase().trim();
+
+      if (searchUsn) {
+        const detectedCategory = classifyUsnOrCourseCategory({ usn: searchUsn });
+
+        // Block UG USNs when UG is OFF
+        if (detectedCategory === 'UG' && !state.ugApplicationOpen) {
+          return res.status(403).json({
+            success: false,
+            categoryBlocked: 'UG',
+            message: 'UG USN registration is currently closed. Only PG (MBA / MCA) USN registration is open.'
+          });
+        }
+
+        // Block PG USNs when PG is OFF
+        if (detectedCategory === 'PG' && !state.pgApplicationOpen) {
+          return res.status(403).json({
+            success: false,
+            categoryBlocked: 'PG',
+            message: 'PG USN registration is currently closed. Only UG (B.E. / B.Tech.) USN registration is open.'
+          });
+        }
+      }
+
+      // If querying uploaded master USN table (if present in SQLite), filter by active category only
+      let uploadedRows = [];
+      try {
+        uploadedRows = searchUsn
+          ? activeDb
+              .prepare(`SELECT * FROM student_usns WHERE UPPER(usn) = ? LIMIT 1`)
+              .all(searchUsn)
+          : activeDb.prepare(`SELECT * FROM student_usns LIMIT 200`).all();
+      } catch (_) {
+        uploadedRows = [];
+      }
+
+      const visibleUsns = filterStudentFacingUsnRecords(uploadedRows, state);
+
+      return res.json({
+        success: true,
+        ugApplicationOpen: state.ugApplicationOpen,
+        pgApplicationOpen: state.pgApplicationOpen,
+        usns: visibleUsns
+      });
+    } catch (err) {
+      return res.status(500).json({ success: false, message: err.message });
     }
   });
 

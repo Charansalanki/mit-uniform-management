@@ -24,7 +24,7 @@ import { useStudentProgressPersistence, SavedDeviceStudent } from './hooks/useSt
 import UniformSizeSelectionStep from './components/student/UniformSizeSelectionStep';
 import TailorMeasurementReportModal from './components/shared/TailorMeasurementReportModal';
 import { MIT_SEAL_LOGO_BASE64 } from './utils/mitLogoBase64';
-import { useUgPgApplicationStatus } from './components/student/StudentApplicationGate';
+import { useApplicationVisibility } from './components/student/StudentApplicationGate';
 
 /* ─── Constants ─────────────────────────────────────────────── */
 const SHIRT_SIZES: ShirtSize[] = ['XS', 'S', 'M', 'L', 'XL', 'XXL', 'XXXL'];
@@ -127,15 +127,41 @@ export default function StudentPortal() {
   const {
     ugApplicationOpen,
     pgApplicationOpen,
-    isCategoryOpenForStudent,
-    openStatusCheck
-  } = useUgPgApplicationStatus();
+    allowedEducationLevels,
+    allowedCourses,
+    defaultEducationLevel,
+    defaultCourse
+  } = useApplicationVisibility();
 
-  const categoryCheck = isCategoryOpenForStudent({
-    usn: form.usn,
-    course: form.course,
-    educationLevel: form.educationLevel
-  });
+  // Automatically switch active form category if the admin disables the currently selected category
+  useEffect(() => {
+    if (!ugApplicationOpen && form.educationLevel === 'UG') {
+      setForm((prev) => ({
+        ...prev,
+        educationLevel: 'PG',
+        course: 'MBA',
+        usn: '',
+        department: '',
+        semester: 1
+      }));
+    } else if (!pgApplicationOpen && form.educationLevel === 'PG') {
+      setForm((prev) => ({
+        ...prev,
+        educationLevel: 'UG',
+        course: 'B.E.',
+        usn: '',
+        department: '',
+        semester: 1
+      }));
+    }
+  }, [ugApplicationOpen, pgApplicationOpen, form.educationLevel]);
+
+  const availableSemesters = useMemo(() => {
+    if (form.educationLevel === 'PG') {
+      return SEMESTERS.filter((s) => s.number <= 2);
+    }
+    return SEMESTERS;
+  }, [form.educationLevel]);
 
   const {
     restoringFromDb,
@@ -275,8 +301,12 @@ export default function StudentPortal() {
 
   const goToSizes = (e?: React.MouseEvent) => {
     if (e) e.preventDefault();
-    if (!categoryCheck.isOpen) {
-      showToast(categoryCheck.message, 'error');
+    if (form.educationLevel === 'UG' && !ugApplicationOpen) {
+      showToast('Undergraduate (UG) application is currently closed.', 'error');
+      return;
+    }
+    if (form.educationLevel === 'PG' && !pgApplicationOpen) {
+      showToast('Postgraduate (PG) application is currently closed.', 'error');
       return;
     }
     if (!form.usn.trim()) {
@@ -298,8 +328,12 @@ export default function StudentPortal() {
 
   /* ─── Submit ─── */
   const handleSubmit = async () => {
-    if (!categoryCheck.isOpen) {
-      showToast(categoryCheck.message, 'error');
+    if (form.educationLevel === 'UG' && !ugApplicationOpen) {
+      showToast('Undergraduate (UG) application is currently closed.', 'error');
+      return;
+    }
+    if (form.educationLevel === 'PG' && !pgApplicationOpen) {
+      showToast('Postgraduate (PG) application is currently closed.', 'error');
       return;
     }
     if (!consent) { showToast('Please accept the terms before submitting.', 'error'); return; }
@@ -614,69 +648,80 @@ export default function StudentPortal() {
           </div>
 
           <div className="portal-body">
-            {!categoryCheck.isOpen ? (
-              <div className="max-w-2xl mx-auto my-6 bg-white rounded-2xl border-2 border-rose-300 shadow-md overflow-hidden text-left">
-                <div className="bg-slate-900 text-white px-6 py-5 flex items-center justify-between">
-                  <div>
-                    <span className="text-[11px] font-extrabold uppercase tracking-wider text-rose-400">
-                      {categoryCheck.category === 'UG'
-                        ? 'Undergraduate (UG) Portal Notice'
-                        : 'Postgraduate (PG) Portal Notice'}
-                    </span>
-                    <h2 className="text-xl font-black mt-0.5">
-                      {categoryCheck.category} Uniform Application Is Currently Closed
-                    </h2>
-                  </div>
-                  <span className="px-3 py-1 rounded-full text-xs font-black bg-rose-600 text-white shadow-xs">
-                    {categoryCheck.category}: CLOSED
-                  </span>
-                </div>
-
-                <div className="p-6 space-y-4">
-                  <p className="text-sm text-slate-700 font-medium leading-relaxed">
-                    {categoryCheck.message}
-                  </p>
-
-                  {form.usn && (
-                    <div className="p-3.5 rounded-xl bg-slate-50 border border-slate-200 text-xs text-slate-700 flex items-center justify-between">
-                      <span>
-                        Entered USN <strong className="font-mono">{form.usn}</strong> belongs to{' '}
-                        <strong>{categoryCheck.category} ({form.course || form.department})</strong>.
-                      </span>
+            {/* ════ STEP 1: Personal Info ════ */}
+            {step === 'personal' && (
+              <div>
+                {/* Application Category Selector (Only renders enabled categories!) */}
+                {(ugApplicationOpen || pgApplicationOpen) && (
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-5">
+                    {ugApplicationOpen && (
                       <button
                         type="button"
-                        onClick={() => setForm((prev) => ({ ...prev, usn: '', department: '' }))}
-                        className="text-blue-600 hover:underline font-bold cursor-pointer"
+                        onClick={() =>
+                          setForm((prev) => ({
+                            ...prev,
+                            educationLevel: 'UG',
+                            course: 'B.E.',
+                            usn: '',
+                            department: '',
+                            semester: 1
+                          }))
+                        }
+                        className={`p-4 rounded-xl border-2 text-left transition cursor-pointer ${
+                          form.educationLevel === 'UG'
+                            ? 'border-blue-600 bg-blue-50/40 ring-2 ring-blue-100 shadow-xs'
+                            : 'border-slate-200 bg-white hover:border-slate-300'
+                        }`}
                       >
-                        Clear USN
+                        <div className="text-xs font-black uppercase text-blue-600">
+                          Undergraduate (UG) Application
+                        </div>
+                        <div className="text-sm font-bold text-slate-900 mt-0.5">
+                          B.E. / B.Tech. Uniform Registration
+                        </div>
+                        <div className="text-[11px] text-slate-500 mt-1">
+                          Engineering Programs (1st – 4th Year)
+                        </div>
                       </button>
-                    </div>
-                  )}
+                    )}
 
-                  <div className="pt-3 border-t border-slate-200 flex flex-wrap items-center justify-between gap-3">
-                    <span className="text-xs text-slate-500 font-medium">
-                      Already registered earlier? Check your live payment status:
-                    </span>
-                    <button
-                      type="button"
-                      onClick={openStatusCheck}
-                      className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-xs font-black rounded-xl shadow-xs transition-colors cursor-pointer flex items-center gap-1.5"
-                    >
-                      <Search size={14} />
-                      <span>Check Application & Payment Status</span>
-                    </button>
+                    {pgApplicationOpen && (
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setForm((prev) => ({
+                            ...prev,
+                            educationLevel: 'PG',
+                            course: 'MBA',
+                            usn: '',
+                            department: '',
+                            semester: 1
+                          }))
+                        }
+                        className={`p-4 rounded-xl border-2 text-left transition cursor-pointer ${
+                          form.educationLevel === 'PG'
+                            ? 'border-purple-600 bg-purple-50/40 ring-2 ring-purple-100 shadow-xs'
+                            : 'border-slate-200 bg-white hover:border-slate-300'
+                        }`}
+                      >
+                        <div className="text-xs font-black uppercase text-purple-600">
+                          Postgraduate (PG) Application
+                        </div>
+                        <div className="text-sm font-bold text-slate-900 mt-0.5">
+                          MBA / MCA Uniform Registration
+                        </div>
+                        <div className="text-[11px] text-slate-500 mt-1">
+                          Management & Computer Applications (1st – 2nd Year)
+                        </div>
+                      </button>
+                    )}
                   </div>
+                )}
+
+                <div className="p-section-title">
+                  <span className="p-section-icon"><User size={16} /></span>
+                  Personal Information
                 </div>
-              </div>
-            ) : (
-              <>
-                {/* ════ STEP 1: Personal Info ════ */}
-                {step === 'personal' && (
-                  <div>
-                    <div className="p-section-title">
-                      <span className="p-section-icon"><User size={16} /></span>
-                      Personal Information
-                    </div>
 
                     <div className="p-grid p-grid-2">
                       <div className="p-field">
@@ -775,7 +820,7 @@ export default function StudentPortal() {
                             value={form.semester}
                             onChange={e => setField('semester', parseInt(e.target.value))}
                           >
-                            {SEMESTERS.map(s => (
+                            {availableSemesters.map(s => (
                               <option key={s.number} value={s.number}>{s.label}</option>
                             ))}
                           </select>
@@ -1030,8 +1075,6 @@ export default function StudentPortal() {
                     />
                   </div>
                 )}
-              </>
-            )}
           </div>
         </div>
 
