@@ -13,7 +13,7 @@ import {
   PaymentAuditLog
 } from './types';
 
-const API_BASE = 'http://localhost:4000/api';
+const API_BASE = '/api';
 const TOKEN_KEY = 'mit_uniform_admin_token_v1';
 
 export function getAuthToken(): string | null {

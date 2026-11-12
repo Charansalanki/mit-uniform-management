@@ -1099,7 +1099,7 @@ app.get('/api/admin/audit-logs', authenticateAdmin, (_req, res) => {
   }
 });
 
-app.listen(port, () => {
+app.listen(port, '0.0.0.0', () => {
   console.log(`Uniform Management API running at http://localhost:${port}`);
   console.log(`Database engine: Native SQLite (Node 24 DatabaseSync) with WAL mode & FTS5 indexing`);
 });
