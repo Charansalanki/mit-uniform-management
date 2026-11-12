@@ -227,33 +227,33 @@ export default function App({ adminProfile, onLogout }: AppProps = {}) {
     icon: any;
     badge?: number;
   }> = [
-    {
-      id: 'VENDOR_MANAGEMENT',
-      label: 'Vendor Management & Allocations',
-      icon: Store
-    },
-    {
-      id: 'VERIFICATION',
-      label: 'Bank Verification',
-      icon: CheckCircle2,
-      badge: paymentStats?.pendingVerification || undefined
-    },
-    {
-      id: 'RECONCILIATION',
-      label: 'Bank CSV Reconciliation',
-      icon: FileSpreadsheet
-    },
-    {
-      id: 'AUDIT',
-      label: 'Security Audit Logs',
-      icon: ShieldAlert
-    },
-    {
-      id: 'VENDOR_TRANSACTIONS',
-      label: 'Vendor Transaction History',
-      icon: History
-    }
-  ];
+      {
+        id: 'VENDOR_MANAGEMENT',
+        label: 'Vendor Management & Allocations',
+        icon: Store
+      },
+      {
+        id: 'VERIFICATION',
+        label: 'Bank Verification',
+        icon: CheckCircle2,
+        badge: paymentStats?.pendingVerification || undefined
+      },
+      {
+        id: 'RECONCILIATION',
+        label: 'Bank CSV Reconciliation',
+        icon: FileSpreadsheet
+      },
+      {
+        id: 'AUDIT',
+        label: 'Security Audit Logs',
+        icon: ShieldAlert
+      },
+      {
+        id: 'VENDOR_TRANSACTIONS',
+        label: 'Vendor Transaction History',
+        icon: History
+      }
+    ];
 
   return (
     <div className={`app ${sidebarOpen ? 'sidebar-open' : ''}`}>
