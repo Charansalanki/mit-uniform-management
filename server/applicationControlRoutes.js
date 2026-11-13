@@ -227,6 +227,8 @@ export function createApplicationControlRouter(getDbInstance = () => db) {
   // Toggles UG independently, PG independently, or updates custom notice messages
   // ==========================================================================
   router.patch('/admin/application-controller/status', requireAdminJwt, (req, res) => {
+    const t0 = Date.now();
+    console.log('[AppControl] PATCH /admin/application-controller/status body:', req.body);
     try {
       const activeDb = typeof getDbInstance === 'function' ? getDbInstance() : getDbInstance;
       initUgPgControlTables(activeDb);

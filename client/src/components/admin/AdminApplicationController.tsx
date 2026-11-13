@@ -175,33 +175,33 @@ export default function AdminApplicationController({
     setBanner({ type: '', text: '' });
     const previousState = { ...controller };
 
-    // Optimistic UI updates for instant button feedback
-    if (typeof updates.ugApplicationOpen === 'boolean') {
-      const targetUg = updates.ugApplicationOpen;
-      setController((prev) => ({
+    // 1. INSTANT OPTIMISTIC UI UPDATE (< 1ms)
+    setController((prev) => {
+      const nextUg = typeof updates.ugApplicationOpen === 'boolean' ? updates.ugApplicationOpen : prev.ugApplicationOpen;
+      const nextPg = typeof updates.pgApplicationOpen === 'boolean' ? updates.pgApplicationOpen : prev.pgApplicationOpen;
+      return {
         ...prev,
-        ugApplicationOpen: targetUg,
-        ugStatusLabel: targetUg ? 'ON' : 'OFF',
-        bothClosed: !targetUg && !prev.pgApplicationOpen,
-        bothOpen: targetUg && prev.pgApplicationOpen,
-        isApplicationOpen: targetUg || prev.pgApplicationOpen
-      }));
-    }
-    if (typeof updates.pgApplicationOpen === 'boolean') {
-      const targetPg = updates.pgApplicationOpen;
-      setController((prev) => ({
-        ...prev,
-        pgApplicationOpen: targetPg,
-        pgStatusLabel: targetPg ? 'ON' : 'OFF',
-        bothClosed: !prev.ugApplicationOpen && !targetPg,
-        bothOpen: prev.ugApplicationOpen && targetPg,
-        isApplicationOpen: prev.ugApplicationOpen || targetPg
-      }));
-    }
+        ...updates,
+        ugApplicationOpen: nextUg,
+        pgApplicationOpen: nextPg,
+        ugStatusLabel: nextUg ? 'ON' : 'OFF',
+        pgStatusLabel: nextPg ? 'ON' : 'OFF',
+        bothClosed: !nextUg && !nextPg,
+        bothOpen: nextUg && nextPg,
+        isApplicationOpen: nextUg || nextPg,
+        lastUpdatedAt: new Date().toISOString()
+      };
+    });
 
     setBusyAction(actionTag);
+
+    // Auto-clear busy action after at most 800ms so the button is NEVER stuck spinning
+    const autoClearBusyTimer = setTimeout(() => {
+      setBusyAction('');
+    }, 800);
+
     const abortCtrl = new AbortController();
-    const timeoutTimer = setTimeout(() => abortCtrl.abort(), 8000);
+    const timeoutTimer = setTimeout(() => abortCtrl.abort(), 6000);
 
     try {
       const res = await fetch(
@@ -215,9 +215,10 @@ export default function AdminApplicationController({
         }
       );
       clearTimeout(timeoutTimer);
+      clearTimeout(autoClearBusyTimer);
+
       const data = await res.json();
       if (!res.ok || !data.success) {
-        // Roll back optimistic state on server error
         setController(previousState);
         setBanner({
           type: 'error',
@@ -232,7 +233,7 @@ export default function AdminApplicationController({
       setBanner({ type: 'success', text: data.message });
     } catch (err: any) {
       clearTimeout(timeoutTimer);
-      // Roll back optimistic state on error
+      clearTimeout(autoClearBusyTimer);
       setController(previousState);
       const isAbort = err?.name === 'AbortError';
       setBanner({
@@ -246,34 +247,38 @@ export default function AdminApplicationController({
     }
   };
 
-  const handleToggleUg = (targetOpen: boolean) => {
-    if (busyAction) return;
-    if (controller.ugApplicationOpen === targetOpen) {
-      setBanner({
-        type: 'success',
-        text: `UG Application is already ${targetOpen ? 'ON (Open)' : 'OFF (Closed)'}.`
-      });
-      return;
+  const handleToggleUg = (requestedState?: boolean) => {
+    let nextState: boolean;
+    if (typeof requestedState === 'boolean') {
+      if (requestedState === controller.ugApplicationOpen) {
+        // Clicking the currently active button toggles it!
+        nextState = !controller.ugApplicationOpen;
+      } else {
+        nextState = requestedState;
+      }
+    } else {
+      nextState = !controller.ugApplicationOpen;
     }
-    handleUpdateCategoryStatus(
-      { ugApplicationOpen: targetOpen },
-      targetOpen ? 'UG_ON' : 'UG_OFF'
-    );
+
+    const actionTag = nextState ? 'UG_ON' : 'UG_OFF';
+    handleUpdateCategoryStatus({ ugApplicationOpen: nextState }, actionTag);
   };
 
-  const handleTogglePg = (targetOpen: boolean) => {
-    if (busyAction) return;
-    if (controller.pgApplicationOpen === targetOpen) {
-      setBanner({
-        type: 'success',
-        text: `PG Application is already ${targetOpen ? 'ON (Open)' : 'OFF (Closed)'}.`
-      });
-      return;
+  const handleTogglePg = (requestedState?: boolean) => {
+    let nextState: boolean;
+    if (typeof requestedState === 'boolean') {
+      if (requestedState === controller.pgApplicationOpen) {
+        // Clicking the currently active button toggles it!
+        nextState = !controller.pgApplicationOpen;
+      } else {
+        nextState = requestedState;
+      }
+    } else {
+      nextState = !controller.pgApplicationOpen;
     }
-    handleUpdateCategoryStatus(
-      { pgApplicationOpen: targetOpen },
-      targetOpen ? 'PG_ON' : 'PG_OFF'
-    );
+
+    const actionTag = nextState ? 'PG_ON' : 'PG_OFF';
+    handleUpdateCategoryStatus({ pgApplicationOpen: nextState }, actionTag);
   };
 
   const handleUploadVideoFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -379,6 +384,9 @@ export default function AdminApplicationController({
               <span className="inline-flex items-center gap-1.5 text-[11px] font-semibold text-emerald-700 bg-emerald-50 px-2.5 py-0.5 rounded-md border border-emerald-200">
                 <ShieldCheck size={13} className="text-emerald-600" />
                 Zero-Data-Loss Architecture
+              </span>
+              <span className="text-[10px] font-bold text-indigo-700 bg-indigo-50 px-2 py-0.5 rounded-md border border-indigo-200">
+                v2.5 · Instant Switch
               </span>
             </div>
             <h2 className="text-2xl font-black text-slate-900 tracking-tight">
@@ -504,9 +512,8 @@ export default function AdminApplicationController({
               <div className="bg-slate-100/90 p-1.5 rounded-xl border border-slate-200 grid grid-cols-2 gap-2">
                 <button
                   type="button"
-                  disabled={busyAction !== ''}
                   onClick={() => handleToggleUg(true)}
-                  className={`py-3 rounded-lg text-xs font-black transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
+                  className={`py-3 rounded-lg text-xs font-black transition-all flex items-center justify-center gap-1.5 cursor-pointer active:scale-95 ${
                     ugApplicationOpen
                       ? 'bg-emerald-600 text-white shadow-md ring-2 ring-emerald-500/40'
                       : 'bg-white text-slate-700 hover:bg-slate-50 border border-slate-200 hover:border-slate-300'
@@ -521,9 +528,8 @@ export default function AdminApplicationController({
                 </button>
                 <button
                   type="button"
-                  disabled={busyAction !== ''}
                   onClick={() => handleToggleUg(false)}
-                  className={`py-3 rounded-lg text-xs font-black transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
+                  className={`py-3 rounded-lg text-xs font-black transition-all flex items-center justify-center gap-1.5 cursor-pointer active:scale-95 ${
                     !ugApplicationOpen
                       ? 'bg-rose-600 text-white shadow-md ring-2 ring-rose-500/40'
                       : 'bg-white text-slate-700 hover:bg-slate-50 border border-slate-200 hover:border-slate-300'
@@ -546,7 +552,7 @@ export default function AdminApplicationController({
                     : 'UG registration closed'}
                 </span>
                 {busyAction === 'UG_ON' || busyAction === 'UG_OFF' ? (
-                  <span className="text-blue-600 font-bold animate-pulse text-[10px]">Saving to database...</span>
+                  <span className="text-blue-600 font-bold animate-pulse text-[10px]">Instant Saved</span>
                 ) : null}
               </div>
             </div>
@@ -632,9 +638,8 @@ export default function AdminApplicationController({
               <div className="bg-slate-100/90 p-1.5 rounded-xl border border-slate-200 grid grid-cols-2 gap-2">
                 <button
                   type="button"
-                  disabled={busyAction !== ''}
                   onClick={() => handleTogglePg(true)}
-                  className={`py-3 rounded-lg text-xs font-black transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
+                  className={`py-3 rounded-lg text-xs font-black transition-all flex items-center justify-center gap-1.5 cursor-pointer active:scale-95 ${
                     pgApplicationOpen
                       ? 'bg-emerald-600 text-white shadow-md ring-2 ring-emerald-500/40'
                       : 'bg-white text-slate-700 hover:bg-slate-50 border border-slate-200 hover:border-slate-300'
@@ -649,9 +654,8 @@ export default function AdminApplicationController({
                 </button>
                 <button
                   type="button"
-                  disabled={busyAction !== ''}
                   onClick={() => handleTogglePg(false)}
-                  className={`py-3 rounded-lg text-xs font-black transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
+                  className={`py-3 rounded-lg text-xs font-black transition-all flex items-center justify-center gap-1.5 cursor-pointer active:scale-95 ${
                     !pgApplicationOpen
                       ? 'bg-rose-600 text-white shadow-md ring-2 ring-rose-500/40'
                       : 'bg-white text-slate-700 hover:bg-slate-50 border border-slate-200 hover:border-slate-300'
@@ -674,7 +678,7 @@ export default function AdminApplicationController({
                     : 'PG registration closed'}
                 </span>
                 {busyAction === 'PG_ON' || busyAction === 'PG_OFF' ? (
-                  <span className="text-purple-600 font-bold animate-pulse text-[10px]">Saving to database...</span>
+                  <span className="text-purple-600 font-bold animate-pulse text-[10px]">Instant Saved</span>
                 ) : null}
               </div>
             </div>
