@@ -56,7 +56,10 @@ interface UgPgControllerState {
 export default function AdminApplicationController({
   apiBaseUrl = '',
   authToken = typeof localStorage !== 'undefined'
-    ? (localStorage.getItem('mit_admin_token') || localStorage.getItem('adminToken') || localStorage.getItem('token'))
+    ? (localStorage.getItem('mit_uniform_admin_token_v1') ||
+       localStorage.getItem('mit_admin_token') ||
+       localStorage.getItem('adminToken') ||
+       localStorage.getItem('token'))
     : null
 }: AdminApplicationControllerProps) {
   const [controller, setController] = useState<UgPgControllerState>({
@@ -81,22 +84,31 @@ export default function AdminApplicationController({
   const [ugMsgInput, setUgMsgInput] = useState('');
   const [pgMsgInput, setPgMsgInput] = useState('');
   const [videoUrlInput, setVideoUrlInput] = useState('/assets/video/application-closed.mp4');
-  const [busyCategory, setBusyCategory] = useState<string>(''); // 'UG' | 'PG' | 'MESSAGES' | 'VIDEO' | ''
+  const [busyAction, setBusyAction] = useState<string>(''); // 'UG_ON' | 'UG_OFF' | 'PG_ON' | 'PG_OFF' | 'MESSAGES' | 'VIDEO' | ''
   const [uploadingVideo, setUploadingVideo] = useState(false);
   const [banner, setBanner] = useState<{ type: string; text: string }>({ type: '', text: '' });
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+
+  const getEffectiveToken = useCallback(() => {
+    if (typeof localStorage === 'undefined') return authToken;
+    return (
+      localStorage.getItem('mit_uniform_admin_token_v1') ||
+      localStorage.getItem('mit_admin_token') ||
+      localStorage.getItem('adminToken') ||
+      localStorage.getItem('token') ||
+      authToken
+    );
+  }, [authToken]);
 
   const buildHeaders = useCallback(
     (isJson = true) => {
       const h: Record<string, string> = {};
       if (isJson) h['Content-Type'] = 'application/json';
-      const token = typeof localStorage !== 'undefined'
-        ? (localStorage.getItem('mit_admin_token') || authToken)
-        : authToken;
+      const token = getEffectiveToken();
       if (token) h['Authorization'] = `Bearer ${token}`;
       return h;
     },
-    [authToken]
+    [getEffectiveToken]
   );
 
   const loadControllerState = useCallback(async () => {
@@ -126,12 +138,19 @@ export default function AdminApplicationController({
     loadControllerState();
   }, [loadControllerState]);
 
+  useEffect(() => {
+    if (banner.text) {
+      const timer = setTimeout(() => {
+        setBanner({ type: '', text: '' });
+      }, 5000);
+      return () => clearTimeout(timer);
+    }
+  }, [banner.text]);
+
   // Real-time SSE updates for live multi-admin synchronization
   useAuthenticatedSse({
     streamPath: '/api/sse/admin',
-    jwtToken: typeof localStorage !== 'undefined'
-      ? (localStorage.getItem('mit_admin_token') || authToken)
-      : authToken,
+    jwtToken: getEffectiveToken(),
     apiBaseUrl,
     eventHandlers: {
       APPLICATION_STATUS_CHANGED: (data) => {
@@ -151,22 +170,55 @@ export default function AdminApplicationController({
 
   const handleUpdateCategoryStatus = async (
     updates: Partial<UgPgControllerState>,
-    categoryTag: string
+    actionTag: 'UG_ON' | 'UG_OFF' | 'PG_ON' | 'PG_OFF' | 'MESSAGES' | 'VIDEO' | ''
   ) => {
     setBanner({ type: '', text: '' });
+    const previousState = { ...controller };
+
+    // Optimistic UI updates for instant button feedback
+    if (typeof updates.ugApplicationOpen === 'boolean') {
+      const targetUg = updates.ugApplicationOpen;
+      setController((prev) => ({
+        ...prev,
+        ugApplicationOpen: targetUg,
+        ugStatusLabel: targetUg ? 'ON' : 'OFF',
+        bothClosed: !targetUg && !prev.pgApplicationOpen,
+        bothOpen: targetUg && prev.pgApplicationOpen,
+        isApplicationOpen: targetUg || prev.pgApplicationOpen
+      }));
+    }
+    if (typeof updates.pgApplicationOpen === 'boolean') {
+      const targetPg = updates.pgApplicationOpen;
+      setController((prev) => ({
+        ...prev,
+        pgApplicationOpen: targetPg,
+        pgStatusLabel: targetPg ? 'ON' : 'OFF',
+        bothClosed: !prev.ugApplicationOpen && !targetPg,
+        bothOpen: prev.ugApplicationOpen && targetPg,
+        isApplicationOpen: prev.ugApplicationOpen || targetPg
+      }));
+    }
+
+    setBusyAction(actionTag);
+    const abortCtrl = new AbortController();
+    const timeoutTimer = setTimeout(() => abortCtrl.abort(), 8000);
+
     try {
-      setBusyCategory(categoryTag);
       const res = await fetch(
         `${apiBaseUrl}/api/admin/application-controller/status`,
         {
           method: 'PATCH',
           credentials: 'include',
           headers: buildHeaders(true),
-          body: JSON.stringify(updates)
+          body: JSON.stringify(updates),
+          signal: abortCtrl.signal
         }
       );
+      clearTimeout(timeoutTimer);
       const data = await res.json();
       if (!res.ok || !data.success) {
+        // Roll back optimistic state on server error
+        setController(previousState);
         setBanner({
           type: 'error',
           text: data.message || 'Failed to update application status.'
@@ -179,13 +231,49 @@ export default function AdminApplicationController({
       setPgMsgInput(data.controller.pgClosedMessage || '');
       setBanner({ type: 'success', text: data.message });
     } catch (err: any) {
+      clearTimeout(timeoutTimer);
+      // Roll back optimistic state on error
+      setController(previousState);
+      const isAbort = err?.name === 'AbortError';
       setBanner({
         type: 'error',
-        text: err?.message || 'Network error while updating application status.'
+        text: isAbort
+          ? 'Network request timed out. Please check server connectivity.'
+          : (err?.message || 'Network error while updating application status.')
       });
     } finally {
-      setBusyCategory('');
+      setBusyAction('');
     }
+  };
+
+  const handleToggleUg = (targetOpen: boolean) => {
+    if (busyAction) return;
+    if (controller.ugApplicationOpen === targetOpen) {
+      setBanner({
+        type: 'success',
+        text: `UG Application is already ${targetOpen ? 'ON (Open)' : 'OFF (Closed)'}.`
+      });
+      return;
+    }
+    handleUpdateCategoryStatus(
+      { ugApplicationOpen: targetOpen },
+      targetOpen ? 'UG_ON' : 'UG_OFF'
+    );
+  };
+
+  const handleTogglePg = (targetOpen: boolean) => {
+    if (busyAction) return;
+    if (controller.pgApplicationOpen === targetOpen) {
+      setBanner({
+        type: 'success',
+        text: `PG Application is already ${targetOpen ? 'ON (Open)' : 'OFF (Closed)'}.`
+      });
+      return;
+    }
+    handleUpdateCategoryStatus(
+      { pgApplicationOpen: targetOpen },
+      targetOpen ? 'PG_ON' : 'PG_OFF'
+    );
   };
 
   const handleUploadVideoFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -382,15 +470,18 @@ export default function AdminApplicationController({
                 </h3>
               </div>
 
-              <span
-                className={`px-3 py-1 rounded-full text-xs font-black border shadow-xs ${
+              <button
+                type="button"
+                onClick={() => handleToggleUg(!ugApplicationOpen)}
+                title="Click to toggle UG Application status"
+                className={`px-3 py-1 rounded-full text-xs font-black border shadow-xs cursor-pointer transition-transform hover:scale-105 ${
                   ugApplicationOpen
-                    ? 'bg-emerald-100 text-emerald-900 border-emerald-300'
-                    : 'bg-rose-100 text-rose-900 border-rose-300'
+                    ? 'bg-emerald-100 text-emerald-900 border-emerald-300 hover:bg-emerald-200'
+                    : 'bg-rose-100 text-rose-900 border-rose-300 hover:bg-rose-200'
                 }`}
               >
                 Status: {ugApplicationOpen ? 'ON (Open)' : 'OFF (Closed)'}
-              </span>
+              </button>
             </div>
 
             <p className="text-xs text-slate-600 leading-relaxed font-normal">
@@ -409,45 +500,55 @@ export default function AdminApplicationController({
             </div>
 
             {/* Independent UG ON / OFF Toggle Buttons */}
-            <div className="bg-slate-100/90 p-1.5 rounded-xl border border-slate-200 grid grid-cols-2 gap-2">
-              <button
-                type="button"
-                disabled={busyCategory === 'UG'}
-                onClick={() =>
-                  handleUpdateCategoryStatus({ ugApplicationOpen: true }, 'UG')
-                }
-                className={`py-3 rounded-lg text-xs font-black transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
-                  ugApplicationOpen
-                    ? 'bg-emerald-600 text-white shadow-md ring-2 ring-emerald-500/40'
-                    : 'bg-white text-slate-700 hover:bg-slate-50 border border-slate-200'
-                }`}
-              >
-                {busyCategory === 'UG' && ugApplicationOpen ? (
-                  <Loader2 size={14} className="animate-spin" />
-                ) : (
-                  <Power size={14} />
-                )}
-                <span>UG Application: ON</span>
-              </button>
-              <button
-                type="button"
-                disabled={busyCategory === 'UG'}
-                onClick={() =>
-                  handleUpdateCategoryStatus({ ugApplicationOpen: false }, 'UG')
-                }
-                className={`py-3 rounded-lg text-xs font-black transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
-                  !ugApplicationOpen
-                    ? 'bg-rose-600 text-white shadow-md ring-2 ring-rose-500/40'
-                    : 'bg-white text-slate-700 hover:bg-slate-50 border border-slate-200'
-                }`}
-              >
-                {busyCategory === 'UG' && !ugApplicationOpen ? (
-                  <Loader2 size={14} className="animate-spin" />
-                ) : (
-                  <Power size={14} />
-                )}
-                <span>UG Application: OFF</span>
-              </button>
+            <div className="space-y-1.5">
+              <div className="bg-slate-100/90 p-1.5 rounded-xl border border-slate-200 grid grid-cols-2 gap-2">
+                <button
+                  type="button"
+                  disabled={busyAction !== ''}
+                  onClick={() => handleToggleUg(true)}
+                  className={`py-3 rounded-lg text-xs font-black transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
+                    ugApplicationOpen
+                      ? 'bg-emerald-600 text-white shadow-md ring-2 ring-emerald-500/40'
+                      : 'bg-white text-slate-700 hover:bg-slate-50 border border-slate-200 hover:border-slate-300'
+                  }`}
+                >
+                  {busyAction === 'UG_ON' ? (
+                    <Loader2 size={14} className="animate-spin text-white" />
+                  ) : (
+                    <Power size={14} />
+                  )}
+                  <span>UG Application: ON</span>
+                </button>
+                <button
+                  type="button"
+                  disabled={busyAction !== ''}
+                  onClick={() => handleToggleUg(false)}
+                  className={`py-3 rounded-lg text-xs font-black transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
+                    !ugApplicationOpen
+                      ? 'bg-rose-600 text-white shadow-md ring-2 ring-rose-500/40'
+                      : 'bg-white text-slate-700 hover:bg-slate-50 border border-slate-200 hover:border-slate-300'
+                  }`}
+                >
+                  {busyAction === 'UG_OFF' ? (
+                    <Loader2 size={14} className="animate-spin text-white" />
+                  ) : (
+                    <Power size={14} />
+                  )}
+                  <span>UG Application: OFF</span>
+                </button>
+              </div>
+
+              <div className="flex items-center justify-between text-[11px] font-semibold px-1">
+                <span className={`flex items-center gap-1.5 ${ugApplicationOpen ? 'text-emerald-700' : 'text-rose-600'}`}>
+                  <span className={`w-2 h-2 rounded-full ${ugApplicationOpen ? 'bg-emerald-500 animate-pulse' : 'bg-rose-500'}`} />
+                  {ugApplicationOpen
+                    ? 'UG registrations and payments active'
+                    : 'UG registration closed'}
+                </span>
+                {busyAction === 'UG_ON' || busyAction === 'UG_OFF' ? (
+                  <span className="text-blue-600 font-bold animate-pulse text-[10px]">Saving to database...</span>
+                ) : null}
+              </div>
             </div>
 
             <div>
@@ -497,15 +598,18 @@ export default function AdminApplicationController({
                 </h3>
               </div>
 
-              <span
-                className={`px-3 py-1 rounded-full text-xs font-black border shadow-xs ${
+              <button
+                type="button"
+                onClick={() => handleTogglePg(!pgApplicationOpen)}
+                title="Click to toggle PG Application status"
+                className={`px-3 py-1 rounded-full text-xs font-black border shadow-xs cursor-pointer transition-transform hover:scale-105 ${
                   pgApplicationOpen
-                    ? 'bg-emerald-100 text-emerald-900 border-emerald-300'
-                    : 'bg-rose-100 text-rose-900 border-rose-300'
+                    ? 'bg-emerald-100 text-emerald-900 border-emerald-300 hover:bg-emerald-200'
+                    : 'bg-rose-100 text-rose-900 border-rose-300 hover:bg-rose-200'
                 }`}
               >
                 Status: {pgApplicationOpen ? 'ON (Open)' : 'OFF (Closed)'}
-              </span>
+              </button>
             </div>
 
             <p className="text-xs text-slate-600 leading-relaxed font-normal">
@@ -524,45 +628,55 @@ export default function AdminApplicationController({
             </div>
 
             {/* Independent PG ON / OFF Toggle Buttons */}
-            <div className="bg-slate-100/90 p-1.5 rounded-xl border border-slate-200 grid grid-cols-2 gap-2">
-              <button
-                type="button"
-                disabled={busyCategory === 'PG'}
-                onClick={() =>
-                  handleUpdateCategoryStatus({ pgApplicationOpen: true }, 'PG')
-                }
-                className={`py-3 rounded-lg text-xs font-black transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
-                  pgApplicationOpen
-                    ? 'bg-emerald-600 text-white shadow-md ring-2 ring-emerald-500/40'
-                    : 'bg-white text-slate-700 hover:bg-slate-50 border border-slate-200'
-                }`}
-              >
-                {busyCategory === 'PG' && pgApplicationOpen ? (
-                  <Loader2 size={14} className="animate-spin" />
-                ) : (
-                  <Power size={14} />
-                )}
-                <span>PG Application: ON</span>
-              </button>
-              <button
-                type="button"
-                disabled={busyCategory === 'PG'}
-                onClick={() =>
-                  handleUpdateCategoryStatus({ pgApplicationOpen: false }, 'PG')
-                }
-                className={`py-3 rounded-lg text-xs font-black transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
-                  !pgApplicationOpen
-                    ? 'bg-rose-600 text-white shadow-md ring-2 ring-rose-500/40'
-                    : 'bg-white text-slate-700 hover:bg-slate-50 border border-slate-200'
-                }`}
-              >
-                {busyCategory === 'PG' && !pgApplicationOpen ? (
-                  <Loader2 size={14} className="animate-spin" />
-                ) : (
-                  <Power size={14} />
-                )}
-                <span>PG Application: OFF</span>
-              </button>
+            <div className="space-y-1.5">
+              <div className="bg-slate-100/90 p-1.5 rounded-xl border border-slate-200 grid grid-cols-2 gap-2">
+                <button
+                  type="button"
+                  disabled={busyAction !== ''}
+                  onClick={() => handleTogglePg(true)}
+                  className={`py-3 rounded-lg text-xs font-black transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
+                    pgApplicationOpen
+                      ? 'bg-emerald-600 text-white shadow-md ring-2 ring-emerald-500/40'
+                      : 'bg-white text-slate-700 hover:bg-slate-50 border border-slate-200 hover:border-slate-300'
+                  }`}
+                >
+                  {busyAction === 'PG_ON' ? (
+                    <Loader2 size={14} className="animate-spin text-white" />
+                  ) : (
+                    <Power size={14} />
+                  )}
+                  <span>PG Application: ON</span>
+                </button>
+                <button
+                  type="button"
+                  disabled={busyAction !== ''}
+                  onClick={() => handleTogglePg(false)}
+                  className={`py-3 rounded-lg text-xs font-black transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
+                    !pgApplicationOpen
+                      ? 'bg-rose-600 text-white shadow-md ring-2 ring-rose-500/40'
+                      : 'bg-white text-slate-700 hover:bg-slate-50 border border-slate-200 hover:border-slate-300'
+                  }`}
+                >
+                  {busyAction === 'PG_OFF' ? (
+                    <Loader2 size={14} className="animate-spin text-white" />
+                  ) : (
+                    <Power size={14} />
+                  )}
+                  <span>PG Application: OFF</span>
+                </button>
+              </div>
+
+              <div className="flex items-center justify-between text-[11px] font-semibold px-1">
+                <span className={`flex items-center gap-1.5 ${pgApplicationOpen ? 'text-emerald-700' : 'text-rose-600'}`}>
+                  <span className={`w-2 h-2 rounded-full ${pgApplicationOpen ? 'bg-emerald-500 animate-pulse' : 'bg-rose-500'}`} />
+                  {pgApplicationOpen
+                    ? 'PG registrations and payments active'
+                    : 'PG registration closed'}
+                </span>
+                {busyAction === 'PG_ON' || busyAction === 'PG_OFF' ? (
+                  <span className="text-purple-600 font-bold animate-pulse text-[10px]">Saving to database...</span>
+                ) : null}
+              </div>
             </div>
 
             <div>
@@ -609,7 +723,7 @@ export default function AdminApplicationController({
 
           <button
             type="button"
-            disabled={busyCategory === 'MESSAGES'}
+            disabled={busyAction === 'MESSAGES'}
             onClick={() =>
               handleUpdateCategoryStatus(
                 {
@@ -622,7 +736,7 @@ export default function AdminApplicationController({
             }
             className="px-5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white text-xs font-black rounded-xl shadow-xs transition-all flex items-center justify-center gap-2 cursor-pointer shrink-0"
           >
-            {busyCategory === 'MESSAGES' ? (
+            {busyAction === 'MESSAGES' ? (
               <Loader2 size={14} className="animate-spin" />
             ) : (
               <Save size={14} />
