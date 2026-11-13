@@ -32,6 +32,55 @@ const SUPPORTED_SSE_EVENTS = [
   'DISTRIBUTION_DETAILS_UPDATED'
 ];
 
+function deferUntilPageComplete(fn: () => void) {
+  if (typeof window === 'undefined') return;
+  if (document.readyState === 'complete') {
+    setTimeout(fn, 150);
+  } else {
+    window.addEventListener('load', () => {
+      setTimeout(fn, 200);
+    }, { once: true });
+  }
+}
+
+function initGlobalEs(url: string) {
+  if (globalEs && globalEsUrl === url && globalEs.readyState !== EventSource.CLOSED) {
+    return;
+  }
+  if (globalEs) {
+    try {
+      globalEs.close();
+    } catch (_) {}
+  }
+
+  globalEsUrl = url;
+  try {
+    globalEs = new EventSource(url);
+
+    SUPPORTED_SSE_EVENTS.forEach((evtName) => {
+      globalEs?.addEventListener(evtName, (event: any) => {
+        let parsedData: any = undefined;
+        try {
+          parsedData = event.data ? JSON.parse(event.data) : undefined;
+        } catch (_) {
+          parsedData = event.data;
+        }
+        globalListeners.forEach((fn) => {
+          try {
+            fn(evtName, parsedData);
+          } catch (_) {}
+        });
+      });
+    });
+
+    globalEs.onerror = () => {
+      // EventSource will auto-retry
+    };
+  } catch (err) {
+    console.warn('[RealtimeSync] Could not open shared EventSource:', err);
+  }
+}
+
 function subscribeToSharedSse(url: string, callback: EventCallback): () => void {
   globalListeners.add(callback);
 
@@ -40,40 +89,12 @@ function subscribeToSharedSse(url: string, callback: EventCallback): () => void 
     closeTimeout = null;
   }
 
-  if (!globalEs || globalEsUrl !== url || globalEs.readyState === EventSource.CLOSED) {
-    if (globalEs) {
-      try {
-        globalEs.close();
-      } catch (_) {}
+  // Defer creating EventSource until page load is complete so Chrome tab stops spinning!
+  deferUntilPageComplete(() => {
+    if (globalListeners.size > 0) {
+      initGlobalEs(url);
     }
-
-    globalEsUrl = url;
-    try {
-      globalEs = new EventSource(url);
-
-      SUPPORTED_SSE_EVENTS.forEach((evtName) => {
-        globalEs?.addEventListener(evtName, (event: any) => {
-          let parsedData: any = undefined;
-          try {
-            parsedData = event.data ? JSON.parse(event.data) : undefined;
-          } catch (_) {
-            parsedData = event.data;
-          }
-          globalListeners.forEach((fn) => {
-            try {
-              fn(evtName, parsedData);
-            } catch (_) {}
-          });
-        });
-      });
-
-      globalEs.onerror = () => {
-        // EventSource will auto-retry
-      };
-    } catch (err) {
-      console.warn('[RealtimeSync] Could not open shared EventSource:', err);
-    }
-  }
+  });
 
   return () => {
     globalListeners.delete(callback);

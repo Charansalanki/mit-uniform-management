@@ -52,7 +52,14 @@ export function useAuthenticatedSse({
 
     let entry = globalSsePool.get(poolKey);
 
-    if (!entry) {
+    const initConnection = () => {
+      let currentEntry = globalSsePool.get(poolKey);
+      if (currentEntry) {
+        currentEntry.handlers.add(handlersRef.current);
+        currentEntry.refCount += 1;
+        return;
+      }
+
       let esInstance: EventSource | null = null;
       try {
         esInstance = new EventSource(fullUrl);
@@ -64,17 +71,16 @@ export function useAuthenticatedSse({
       const activeHandlers = new Set<Record<string, (payload: any) => void>>();
       activeHandlers.add(handlersRef.current);
 
-      entry = {
+      const newEntry: SsePoolEntry = {
         es: esInstance,
         handlers: activeHandlers,
         refCount: 1
       };
-      globalSsePool.set(poolKey, entry);
+      globalSsePool.set(poolKey, newEntry);
 
       // Generic Dispatcher: Dispatches incoming event to all active component subscribers
       const dispatchEventToSubscribers = (eventName: string, data: any) => {
-        if (!entry) return;
-        entry.handlers.forEach((h) => {
+        newEntry.handlers.forEach((h) => {
           try {
             if (typeof h[eventName] === 'function') {
               h[eventName](data);
@@ -125,6 +131,14 @@ export function useAuthenticatedSse({
           // ignore non-json pings
         }
       };
+    };
+
+    if (!entry) {
+      if (typeof window !== 'undefined' && document.readyState !== 'complete') {
+        window.addEventListener('load', () => setTimeout(initConnection, 200), { once: true });
+      } else {
+        setTimeout(initConnection, 100);
+      }
     } else {
       entry.refCount += 1;
       entry.handlers.add(handlersRef.current);
