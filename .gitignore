@@ -17,6 +17,7 @@ server/.env
 server/data/*.db-shm
 server/data/*.db-wal
 server/data/backups/
+backend/data/
 
 # Temporary / Scratch
 scratch/

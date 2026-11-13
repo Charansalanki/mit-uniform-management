@@ -138,6 +138,71 @@ export function createApplicationControlRouter(getDbInstance = () => db) {
   });
 
   // ==========================================================================
+  // 1A. PUBLIC ENDPOINT: GET /api/application-status/closed-video
+  // ==========================================================================
+  router.get('/application-status/closed-video', (req, res) => {
+    try {
+      const activeDb = typeof getDbInstance === 'function' ? getDbInstance() : getDbInstance;
+      const state = getUgPgControlState(activeDb);
+      return res.json({
+        success: true,
+        closedVideoUrl: state.videoUrl,
+        videoUrl: state.videoUrl,
+        ugApplicationOpen: state.ugApplicationOpen,
+        pgApplicationOpen: state.pgApplicationOpen,
+        bothClosed: state.bothClosed,
+        updatedAt: state.lastUpdatedAt,
+        message: 'Application-closed video URL fetched successfully.'
+      });
+    } catch (err) {
+      return res.status(500).json({
+        success: false,
+        message: 'Failed to retrieve closed video URL.'
+      });
+    }
+  });
+
+  // ==========================================================================
+  // 1A-2. REAL-TIME SSE STREAM: GET /api/application-status/stream
+  // ==========================================================================
+  router.get('/application-status/stream', (req, res) => {
+    try {
+      res.writeHead(200, {
+        'Content-Type': 'text/event-stream',
+        'Cache-Control': 'no-cache, no-transform',
+        Connection: 'keep-alive',
+        'X-Accel-Buffering': 'no',
+        'Access-Control-Allow-Origin': '*'
+      });
+      if (typeof res.flushHeaders === 'function') res.flushHeaders();
+
+      const activeDb = typeof getDbInstance === 'function' ? getDbInstance() : getDbInstance;
+      const state = getUgPgControlState(activeDb);
+      res.write(
+        `data: ${JSON.stringify({
+          success: true,
+          ...state,
+          message: 'Connected to real-time status stream.'
+        })}\n\n`
+      );
+
+      const heartbeat = setInterval(() => {
+        try {
+          res.write(': heartbeat\n\n');
+        } catch (_) {
+          clearInterval(heartbeat);
+        }
+      }, 25000);
+
+      req.on('close', () => {
+        clearInterval(heartbeat);
+      });
+    } catch (err) {
+      if (!res.headersSent) res.status(500).end();
+    }
+  });
+
+  // ==========================================================================
   // 1B. STUDENT-FACING USN VERIFICATION / LOOKUP ENDPOINT
   // Filters out disabled categories without altering SQLite records
   // ==========================================================================
@@ -344,11 +409,28 @@ export function createApplicationControlRouter(getDbInstance = () => db) {
         );
       } catch (_) {}
 
+      // Keep application_settings in sync
+      try {
+        activeDb.prepare(`
+          UPDATE application_settings
+          SET ug_application_open = ?,
+              pg_application_open = ?,
+              closed_video_url = ?,
+              updated_at = ?
+          WHERE id = 1
+        `).run(nextUgOpen ? 1 : 0, nextPgOpen ? 1 : 0, cleanVideoUrl, nowIso);
+      } catch (_) {}
+
       const updatedState = getUgPgControlState(activeDb);
       broadcastUgPgChange(updatedState);
 
       return res.json({
         success: true,
+        ugApplicationOpen: updatedState.ugApplicationOpen,
+        pgApplicationOpen: updatedState.pgApplicationOpen,
+        bothClosed: updatedState.bothClosed,
+        closedVideoUrl: updatedState.videoUrl,
+        updatedAt: updatedState.lastUpdatedAt,
         message: `Application Controls Saved: UG Application is ${
           updatedState.ugStatusLabel
         } | PG Application is ${
@@ -360,6 +442,198 @@ export function createApplicationControlRouter(getDbInstance = () => db) {
       return res.status(500).json({ success: false, message: err.message });
     }
   });
+
+  // ==========================================================================
+  // 3B. ADMIN ENDPOINT: DEDICATED INDEPENDENT UG TOGGLE
+  // PATCH / PUT / POST /api/admin/application-status/ug
+  // ==========================================================================
+  const handleAdminUgToggle = (req, res) => {
+    try {
+      const activeDb = typeof getDbInstance === 'function' ? getDbInstance() : getDbInstance;
+      initUgPgControlTables(activeDb);
+
+      const currentState = getUgPgControlState(activeDb);
+      let requested = null;
+      for (const k of ['ugApplicationOpen', 'ug_application_open', 'status', 'isOpen']) {
+        if (req.body && req.body[k] !== undefined) {
+          const val = req.body[k];
+          if (typeof val === 'boolean') { requested = val; break; }
+          if (val === 1 || val === '1' || val === 'true' || val === 'ON') { requested = true; break; }
+          if (val === 0 || val === '0' || val === 'false' || val === 'OFF') { requested = false; break; }
+        }
+      }
+      if (requested === null) {
+        requested = !currentState.ugApplicationOpen;
+      }
+
+      const adminUsername = req.admin?.username || req.admin?.name || 'Administrator';
+      const nowIso = new Date().toISOString();
+
+      activeDb.prepare(`
+        UPDATE application_category_controls
+        SET ug_open = ?,
+            ug_updated_by = ?,
+            ug_updated_at = ?,
+            updated_by = ?,
+            updated_at = ?
+        WHERE id = 'MIT_UG_PG_MASTER_CONTROL'
+      `).run(requested ? 1 : 0, adminUsername, nowIso, adminUsername, nowIso);
+
+      try {
+        activeDb.prepare(`
+          UPDATE application_settings
+          SET ug_application_open = ?, updated_at = ?
+          WHERE id = 1
+        `).run(requested ? 1 : 0, nowIso);
+      } catch (_) {}
+
+      try {
+        const overallOpen = requested || currentState.pgApplicationOpen ? 1 : 0;
+        activeDb.prepare(`
+          UPDATE student_application_status
+          SET is_application_open = ?,
+              status_label = ?,
+              updated_by_username = ?,
+              updated_at = ?
+          WHERE id = 'MIT_STUDENT_APP_MASTER_SWITCH'
+        `).run(overallOpen, overallOpen ? 'Application ON' : 'Application OFF', adminUsername, nowIso);
+      } catch (_) {}
+
+      activeDb.prepare(`
+        INSERT INTO application_control_audit_logs (
+          category, previous_ug_open, new_ug_open, previous_pg_open, new_pg_open, changed_by, changed_at
+        ) VALUES ('UG', ?, ?, ?, ?, ?, ?)
+      `).run(
+        currentState.ugApplicationOpen ? 1 : 0,
+        requested ? 1 : 0,
+        currentState.pgApplicationOpen ? 1 : 0,
+        currentState.pgApplicationOpen ? 1 : 0,
+        adminUsername,
+        nowIso
+      );
+
+      const updatedState = getUgPgControlState(activeDb);
+      broadcastUgPgChange(updatedState);
+
+      return res.json({
+        success: true,
+        ugApplicationOpen: updatedState.ugApplicationOpen,
+        pgApplicationOpen: updatedState.pgApplicationOpen,
+        bothClosed: updatedState.bothClosed,
+        closedVideoUrl: updatedState.videoUrl,
+        updatedAt: updatedState.lastUpdatedAt,
+        message: `UG application switched ${updatedState.ugApplicationOpen ? 'ON' : 'OFF'}.`,
+        controller: updatedState
+      });
+    } catch (err) {
+      console.error('[AppControl] Update UG error:', err.message);
+      return res.status(500).json({
+        success: false,
+        message: 'SQLite error while updating UG application status.',
+        error: err.message
+      });
+    }
+  };
+
+  router.patch('/admin/application-status/ug', requireAdminJwt, handleAdminUgToggle);
+  router.put('/admin/application-status/ug', requireAdminJwt, handleAdminUgToggle);
+  router.post('/admin/application-status/ug', requireAdminJwt, handleAdminUgToggle);
+
+  // ==========================================================================
+  // 3C. ADMIN ENDPOINT: DEDICATED INDEPENDENT PG TOGGLE
+  // PATCH / PUT / POST /api/admin/application-status/pg
+  // ==========================================================================
+  const handleAdminPgToggle = (req, res) => {
+    try {
+      const activeDb = typeof getDbInstance === 'function' ? getDbInstance() : getDbInstance;
+      initUgPgControlTables(activeDb);
+
+      const currentState = getUgPgControlState(activeDb);
+      let requested = null;
+      for (const k of ['pgApplicationOpen', 'pg_application_open', 'status', 'isOpen']) {
+        if (req.body && req.body[k] !== undefined) {
+          const val = req.body[k];
+          if (typeof val === 'boolean') { requested = val; break; }
+          if (val === 1 || val === '1' || val === 'true' || val === 'ON') { requested = true; break; }
+          if (val === 0 || val === '0' || val === 'false' || val === 'OFF') { requested = false; break; }
+        }
+      }
+      if (requested === null) {
+        requested = !currentState.pgApplicationOpen;
+      }
+
+      const adminUsername = req.admin?.username || req.admin?.name || 'Administrator';
+      const nowIso = new Date().toISOString();
+
+      activeDb.prepare(`
+        UPDATE application_category_controls
+        SET pg_open = ?,
+            pg_updated_by = ?,
+            pg_updated_at = ?,
+            updated_by = ?,
+            updated_at = ?
+        WHERE id = 'MIT_UG_PG_MASTER_CONTROL'
+      `).run(requested ? 1 : 0, adminUsername, nowIso, adminUsername, nowIso);
+
+      try {
+        activeDb.prepare(`
+          UPDATE application_settings
+          SET pg_application_open = ?, updated_at = ?
+          WHERE id = 1
+        `).run(requested ? 1 : 0, nowIso);
+      } catch (_) {}
+
+      try {
+        const overallOpen = currentState.ugApplicationOpen || requested ? 1 : 0;
+        activeDb.prepare(`
+          UPDATE student_application_status
+          SET is_application_open = ?,
+              status_label = ?,
+              updated_by_username = ?,
+              updated_at = ?
+          WHERE id = 'MIT_STUDENT_APP_MASTER_SWITCH'
+        `).run(overallOpen, overallOpen ? 'Application ON' : 'Application OFF', adminUsername, nowIso);
+      } catch (_) {}
+
+      activeDb.prepare(`
+        INSERT INTO application_control_audit_logs (
+          category, previous_ug_open, new_ug_open, previous_pg_open, new_pg_open, changed_by, changed_at
+        ) VALUES ('PG', ?, ?, ?, ?, ?, ?)
+      `).run(
+        currentState.ugApplicationOpen ? 1 : 0,
+        currentState.ugApplicationOpen ? 1 : 0,
+        currentState.pgApplicationOpen ? 1 : 0,
+        requested ? 1 : 0,
+        adminUsername,
+        nowIso
+      );
+
+      const updatedState = getUgPgControlState(activeDb);
+      broadcastUgPgChange(updatedState);
+
+      return res.json({
+        success: true,
+        ugApplicationOpen: updatedState.ugApplicationOpen,
+        pgApplicationOpen: updatedState.pgApplicationOpen,
+        bothClosed: updatedState.bothClosed,
+        closedVideoUrl: updatedState.videoUrl,
+        updatedAt: updatedState.lastUpdatedAt,
+        message: `PG application switched ${updatedState.pgApplicationOpen ? 'ON' : 'OFF'}.`,
+        controller: updatedState
+      });
+    } catch (err) {
+      console.error('[AppControl] Update PG error:', err.message);
+      return res.status(500).json({
+        success: false,
+        message: 'SQLite error while updating PG application status.',
+        error: err.message
+      });
+    }
+  };
+
+  router.patch('/admin/application-status/pg', requireAdminJwt, handleAdminPgToggle);
+  router.put('/admin/application-status/pg', requireAdminJwt, handleAdminPgToggle);
+  router.post('/admin/application-status/pg', requireAdminJwt, handleAdminPgToggle);
 
   // ==========================================================================
   // 4. ADMIN ENDPOINT: UPLOAD OR UPDATE THE OFF-SCREEN VIDEO FILE

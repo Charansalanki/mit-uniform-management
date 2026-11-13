@@ -113,7 +113,7 @@ export default function AdminApplicationController({
 
   const getApiEndpoint = useCallback((path: string) => {
     if (apiBaseUrl) return `${apiBaseUrl}${path}`;
-    if (typeof window !== 'undefined' && window.location.port === '5173') {
+    if (typeof window !== 'undefined' && (window.location.port === '5173' || window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')) {
       return `http://localhost:4000${path}`;
     }
     return path;
@@ -203,22 +203,34 @@ export default function AdminApplicationController({
 
     setBusyAction(actionTag);
 
-    // Auto-clear busy action after at most 800ms so the button is NEVER stuck spinning
+    // Auto-clear busy action quickly so the button is NEVER stuck spinning
     const autoClearBusyTimer = setTimeout(() => {
       setBusyAction('');
-    }, 800);
+    }, 500);
 
     const abortCtrl = new AbortController();
     const timeoutTimer = setTimeout(() => abortCtrl.abort(), 6000);
 
+    // Target dedicated atomic endpoint for UG or PG when available
+    let targetEndpoint = '/api/admin/application-controller/status';
+    let requestBody: any = updates;
+
+    if (actionTag === 'UG_ON' || actionTag === 'UG_OFF') {
+      targetEndpoint = '/api/admin/application-status/ug';
+      requestBody = { ugApplicationOpen: updates.ugApplicationOpen };
+    } else if (actionTag === 'PG_ON' || actionTag === 'PG_OFF') {
+      targetEndpoint = '/api/admin/application-status/pg';
+      requestBody = { pgApplicationOpen: updates.pgApplicationOpen };
+    }
+
     try {
       const res = await fetch(
-        getApiEndpoint('/api/admin/application-controller/status'),
+        getApiEndpoint(targetEndpoint),
         {
           method: 'PATCH',
           credentials: 'include',
           headers: buildHeaders(true),
-          body: JSON.stringify(updates),
+          body: JSON.stringify(requestBody),
           signal: abortCtrl.signal
         }
       );
@@ -235,9 +247,21 @@ export default function AdminApplicationController({
         return;
       }
 
-      setController(data.controller);
-      setUgMsgInput(data.controller.ugClosedMessage || '');
-      setPgMsgInput(data.controller.pgClosedMessage || '');
+      if (data.controller) {
+        setController(data.controller);
+        setUgMsgInput(data.controller.ugClosedMessage || '');
+        setPgMsgInput(data.controller.pgClosedMessage || '');
+      } else {
+        setController((prev) => ({
+          ...prev,
+          ugApplicationOpen: typeof data.ugApplicationOpen === 'boolean' ? data.ugApplicationOpen : prev.ugApplicationOpen,
+          pgApplicationOpen: typeof data.pgApplicationOpen === 'boolean' ? data.pgApplicationOpen : prev.pgApplicationOpen,
+          ugStatusLabel: (typeof data.ugApplicationOpen === 'boolean' ? data.ugApplicationOpen : prev.ugApplicationOpen) ? 'ON' : 'OFF',
+          pgStatusLabel: (typeof data.pgApplicationOpen === 'boolean' ? data.pgApplicationOpen : prev.pgApplicationOpen) ? 'ON' : 'OFF',
+          bothClosed: Boolean(data.bothClosed),
+          lastUpdatedAt: data.updatedAt || new Date().toISOString()
+        }));
+      }
       setBanner({ type: 'success', text: data.message });
     } catch (err: any) {
       clearTimeout(timeoutTimer);

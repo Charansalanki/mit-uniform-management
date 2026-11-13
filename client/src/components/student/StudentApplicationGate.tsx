@@ -52,8 +52,15 @@ export default function StudentApplicationGate({
 
   const fetchApplicationStatus = useCallback(async () => {
     try {
+      const urlPrefix =
+        apiBaseUrl ||
+        (typeof window !== 'undefined' &&
+        (window.location.port === '5173' || window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')
+          ? 'http://localhost:4000'
+          : '');
+
       const res = await fetch(
-        `${apiBaseUrl}/api/application-status?t=${Date.now()}`,
+        `${urlPrefix}/api/application-status?t=${Date.now()}`,
         { cache: 'no-store' }
       );
       const data = await res.json();
@@ -61,7 +68,7 @@ export default function StudentApplicationGate({
         setAppState({
           ugApplicationOpen: Boolean(data.ugApplicationOpen),
           pgApplicationOpen: Boolean(data.pgApplicationOpen),
-          videoUrl: data.videoUrl || '/assets/video/application-closed.mp4'
+          videoUrl: data.videoUrl || data.closedVideoUrl || '/assets/video/application-closed.mp4'
         });
       }
     } catch (err) {

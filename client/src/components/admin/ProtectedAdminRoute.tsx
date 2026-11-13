@@ -20,7 +20,7 @@ export default function ProtectedAdminRoute({ apiBaseUrl = '', children }: Prote
       (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1');
 
     const abortCtrl = new AbortController();
-    const safetyTimeout = setTimeout(() => abortCtrl.abort(), 2500);
+    const safetyTimeout = setTimeout(() => abortCtrl.abort(), 1500);
 
     try {
       const adminToken =
@@ -36,7 +36,14 @@ export default function ProtectedAdminRoute({ apiBaseUrl = '', children }: Prote
         headers['Authorization'] = `Bearer ${adminToken}`;
       }
 
-      const res = await fetch(`${apiBaseUrl}/api/admin/auth/session`, {
+      const endpointPrefix =
+        apiBaseUrl ||
+        (typeof window !== 'undefined' &&
+        (window.location.port === '5173' || window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')
+          ? 'http://localhost:4000'
+          : '');
+
+      const res = await fetch(`${endpointPrefix}/api/admin/auth/session`, {
         method: 'GET',
         credentials: 'include',
         headers,

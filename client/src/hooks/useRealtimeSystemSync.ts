@@ -7,11 +7,95 @@ interface UseRealtimeSystemSyncProps {
   pollIntervalMs?: number;
 }
 
+// Global Singleton SSE Multiplexer to prevent Chrome 6-connection per host exhaustion
+type EventCallback = (eventType: string, data?: any) => void;
+let globalEs: EventSource | null = null;
+let globalEsUrl: string = '';
+const globalListeners = new Set<EventCallback>();
+let closeTimeout: any = null;
+
+const SUPPORTED_SSE_EVENTS = [
+  'GLOBAL_SYNC_UPDATE',
+  'PAYMENT_CONFIG_CHANGED',
+  'PAYMENT_STATUS_UPDATED',
+  'PAYMENT_VERIFIED',
+  'PAYMENT_SUBMITTED',
+  'PAYMENT_REJECTED',
+  'ALLOCATION_RELEASED',
+  'ALLOCATION_ASSIGNED',
+  'VENDOR_ASSIGNMENT_CHANGED',
+  'STUDENTS_REASSIGNED',
+  'VENDOR_REASSIGNED',
+  'VENDOR_UPDATED',
+  'APPLICATION_STATUS_CHANGED',
+  'UG_PG_STATUS_CHANGED',
+  'DISTRIBUTION_DETAILS_UPDATED'
+];
+
+function subscribeToSharedSse(url: string, callback: EventCallback): () => void {
+  globalListeners.add(callback);
+
+  if (closeTimeout) {
+    clearTimeout(closeTimeout);
+    closeTimeout = null;
+  }
+
+  if (!globalEs || globalEsUrl !== url || globalEs.readyState === EventSource.CLOSED) {
+    if (globalEs) {
+      try {
+        globalEs.close();
+      } catch (_) {}
+    }
+
+    globalEsUrl = url;
+    try {
+      globalEs = new EventSource(url);
+
+      SUPPORTED_SSE_EVENTS.forEach((evtName) => {
+        globalEs?.addEventListener(evtName, (event: any) => {
+          let parsedData: any = undefined;
+          try {
+            parsedData = event.data ? JSON.parse(event.data) : undefined;
+          } catch (_) {
+            parsedData = event.data;
+          }
+          globalListeners.forEach((fn) => {
+            try {
+              fn(evtName, parsedData);
+            } catch (_) {}
+          });
+        });
+      });
+
+      globalEs.onerror = () => {
+        // EventSource will auto-retry
+      };
+    } catch (err) {
+      console.warn('[RealtimeSync] Could not open shared EventSource:', err);
+    }
+  }
+
+  return () => {
+    globalListeners.delete(callback);
+    if (globalListeners.size === 0) {
+      closeTimeout = setTimeout(() => {
+        if (globalListeners.size === 0 && globalEs) {
+          try {
+            globalEs.close();
+          } catch (_) {}
+          globalEs = null;
+          globalEsUrl = '';
+        }
+      }, 5000);
+    }
+  };
+}
+
 export function useRealtimeSystemSync({
   apiBaseUrl = '',
   onSyncTrigger,
   onSyncInvalidate,
-  pollIntervalMs = 4000
+  pollIntervalMs = 5000
 }: UseRealtimeSystemSyncProps) {
   const lastVersionRef = useRef<number | null>(null);
   const callbackRef = useRef(onSyncInvalidate || onSyncTrigger);
@@ -20,19 +104,22 @@ export function useRealtimeSystemSync({
   useEffect(() => {
     let isMounted = true;
 
+    const urlPrefix =
+      apiBaseUrl ||
+      (typeof window !== 'undefined' && window.location.port === '5173'
+        ? 'http://localhost:4000'
+        : '');
+
     const checkDatabaseSyncVersion = async () => {
-      // Battery & CPU optimization for low-end mobile devices: don't poll while screen is off or tab hidden
+      // Battery & CPU optimization for background tabs
       if (typeof document !== 'undefined' && document.hidden) return;
 
-      // If active SSE stream is already open, skip background polling to save CPU cycles
-      if (es && es.readyState === EventSource.OPEN && Math.random() > 0.15) return;
+      // If active SSE stream is already healthy, minimize HTTP polling
+      if (globalEs && globalEs.readyState === EventSource.OPEN && Math.random() > 0.15) {
+        return;
+      }
 
       try {
-        const urlPrefix =
-        apiBaseUrl ||
-        (typeof window !== 'undefined' && window.location.port === '5173'
-          ? 'http://localhost:4000'
-          : '');
         const res = await fetch(`${urlPrefix}/api/sync/version?t=${Date.now()}`, {
           cache: 'no-store'
         });
@@ -53,80 +140,20 @@ export function useRealtimeSystemSync({
     checkDatabaseSyncVersion();
     const interval = setInterval(checkDatabaseSyncVersion, pollIntervalMs);
 
-    // Instant SSE stream listener
-    let es: EventSource | null = null;
-    try {
-      const urlPrefix =
-        apiBaseUrl ||
-        (typeof window !== 'undefined' && window.location.port === '5173'
-          ? 'http://localhost:4000'
-          : '');
-      es = new EventSource(`${urlPrefix}/api/sse/payment-config`);
-      es.addEventListener('GLOBAL_SYNC_UPDATE', (event) => {
-        try {
-          const parsed = JSON.parse(event.data);
-          lastVersionRef.current = parsed.syncVersion;
-          callbackRef.current?.(parsed);
-        } catch (err) {
-          callbackRef.current?.();
+    // Subscribe to the shared singleton SSE stream
+    const unsubscribeSse = subscribeToSharedSse(
+      `${urlPrefix}/api/sse/payment-config`,
+      (evtName, data) => {
+        if (data && typeof data.syncVersion === 'number') {
+          lastVersionRef.current = data.syncVersion;
         }
-      });
-      es.addEventListener('PAYMENT_CONFIG_CHANGED', () => {
-        callbackRef.current?.();
-      });
-      es.addEventListener('PAYMENT_STATUS_UPDATED', () => {
-        callbackRef.current?.();
-      });
-      es.addEventListener('PAYMENT_VERIFIED', () => {
-        callbackRef.current?.();
-      });
-      es.addEventListener('PAYMENT_SUBMITTED', () => {
-        callbackRef.current?.();
-      });
-      es.addEventListener('PAYMENT_REJECTED', () => {
-        callbackRef.current?.();
-      });
-      es.addEventListener('ALLOCATION_RELEASED', () => {
-        callbackRef.current?.();
-      });
-      es.addEventListener('ALLOCATION_ASSIGNED', () => {
-        callbackRef.current?.();
-      });
-      es.addEventListener('VENDOR_ASSIGNMENT_CHANGED', () => {
-        callbackRef.current?.();
-      });
-      es.addEventListener('STUDENTS_REASSIGNED', () => {
-        callbackRef.current?.();
-      });
-      es.addEventListener('VENDOR_REASSIGNED', () => {
-        callbackRef.current?.();
-      });
-      es.addEventListener('VENDOR_UPDATED', () => {
-        callbackRef.current?.();
-      });
-      es.addEventListener('APPLICATION_STATUS_CHANGED', (event) => {
-        try {
-          const parsed = JSON.parse(event.data);
-          callbackRef.current?.(parsed);
-        } catch {
-          callbackRef.current?.();
-        }
-      });
-      es.addEventListener('DISTRIBUTION_DETAILS_UPDATED', (event) => {
-        try {
-          const parsed = JSON.parse(event.data);
-          callbackRef.current?.(parsed);
-        } catch {
-          callbackRef.current?.();
-        }
-      });
-    } catch (e) {
-      // Fallback handled by checkDatabaseSyncVersion interval
-    }
+        callbackRef.current?.(data);
+      }
+    );
 
-    // Immediate refresh when user switches back to tab / unlocks phone
+    // Immediate refresh when user switches back to tab
     const handleVisibilityOrFocus = () => {
-      if (document.visibilityState === 'visible') {
+      if (typeof document !== 'undefined' && document.visibilityState === 'visible') {
         checkDatabaseSyncVersion();
         callbackRef.current?.();
       }
@@ -138,7 +165,7 @@ export function useRealtimeSystemSync({
     return () => {
       isMounted = false;
       clearInterval(interval);
-      if (es) es.close();
+      unsubscribeSse();
       window.removeEventListener('focus', handleVisibilityOrFocus);
       document.removeEventListener('visibilitychange', handleVisibilityOrFocus);
     };

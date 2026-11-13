@@ -32,7 +32,23 @@ export function initUgPgControlTables(db) {
       changed_by TEXT NOT NULL,
       changed_at TEXT NOT NULL DEFAULT (datetime('now'))
     );
+
+    CREATE TABLE IF NOT EXISTS application_settings (
+      id INTEGER PRIMARY KEY CHECK (id = 1),
+      ug_application_open INTEGER NOT NULL DEFAULT 1,
+      pg_application_open INTEGER NOT NULL DEFAULT 1,
+      closed_video_url TEXT NOT NULL DEFAULT '/assets/video/application-closed.mp4',
+      updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
   `);
+
+  try {
+    db.prepare(`
+      INSERT INTO application_settings (id, ug_application_open, pg_application_open, closed_video_url, updated_at)
+      VALUES (1, 1, 1, '/assets/video/application-closed.mp4', datetime('now'))
+      ON CONFLICT(id) DO NOTHING
+    `).run();
+  } catch (_) {}
 
   // Seed singleton row ONLY if it does not exist yet (Never overwrites existing admin settings on restart)
   const existing = db
