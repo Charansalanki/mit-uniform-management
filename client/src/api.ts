@@ -824,5 +824,19 @@ export const api = {
     const res = await fetch(`${API_BASE}/admin/payments/audit-logs`, { headers: getAuthHeaders() });
     if (!res.ok) throw new Error('Failed to load audit logs.');
     return res.json();
+  },
+
+  // ─── Admin: Vendor Management ─────────────────────────────────
+  async deleteVendor(vendorId: string): Promise<{ success: boolean; message: string; deletedVendor?: any }> {
+    await ensureAdminToken();
+    const res = await fetch(`${API_BASE}/admin/vendors/${encodeURIComponent(vendorId)}`, {
+      method: 'DELETE',
+      headers: getAuthHeaders()
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok || !data.success) {
+      throw new Error(data.message || 'Failed to delete vendor.');
+    }
+    return data;
   }
 };

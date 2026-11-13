@@ -53,3 +53,4 @@ module.exports = {
   resolveProgramCategory,
   isStudentRecordAllowed,
 };
+

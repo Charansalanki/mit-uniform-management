@@ -1701,6 +1701,131 @@ router.post('/admin/vendors/reassign-group', requireAdminAuth, (req, res) => {
   }
 });
 
+// DELETE /api/admin/vendors/:vendorId
+router.delete('/admin/vendors/:vendorId', requireAdminAuth, (req, res) => {
+  try {
+    const { vendorId } = req.params;
+    const vendor = db.prepare('SELECT * FROM vendors WHERE vendor_id = ?').get(vendorId);
+    if (!vendor) {
+      return res.status(404).json({ success: false, message: 'Vendor not found.' });
+    }
+
+    // Check for verified/confirmed payments linked to this vendor
+    const paidStudents = db.prepare(`
+      SELECT COUNT(*) as count FROM payment_submissions
+      WHERE vendor_id = ? AND payment_status IN ('Verified', 'Payment Verified', 'Payment Successful', 'Paid')
+    `).get(vendorId);
+
+    if (paidStudents && paidStudents.count > 0) {
+      return res.status(400).json({
+        success: false,
+        message: `Cannot delete vendor "${vendor.vendor_name}" because ${paidStudents.count} student(s) have verified/confirmed payments linked to this vendor. Deactivate the vendor instead.`
+      });
+    }
+
+    const now = new Date().toISOString();
+
+    // Snapshot for audit before deletion
+    const allocations = db.prepare('SELECT * FROM vendor_allocations WHERE vendor_id = ?').all(vendorId);
+    const pCfg = db.prepare('SELECT * FROM vendor_payment_configurations WHERE vendor_id = ?').get(vendorId);
+    const assignmentCount = db.prepare('SELECT COUNT(*) as count FROM student_vendor_assignments WHERE vendor_id = ?').get(vendorId);
+
+    db.exec('BEGIN TRANSACTION;');
+    try {
+      // 1. Release all active allocations and clear student assignments
+      const activeAllocs = db.prepare("SELECT allocation_id FROM vendor_allocations WHERE vendor_id = ? AND status = 'ACTIVE'").all(vendorId);
+      for (const alloc of activeAllocs) {
+        // Clear student assignments for this allocation
+        db.prepare('DELETE FROM student_vendor_assignments WHERE allocation_id = ?').run(alloc.allocation_id);
+        // Clear vendor references in registrations
+        db.prepare(`
+          UPDATE registrations
+          SET assigned_vendor_id = NULL, assigned_vendor_name = NULL, vendor_allocation_id = NULL
+          WHERE vendor_allocation_id = ?
+        `).run(alloc.allocation_id);
+        // Clear in student_tracking_records
+        try {
+          db.prepare(`
+            UPDATE student_tracking_records
+            SET assigned_vendor = '{"vendorId":"","vendorName":"Assigned Uniform Vendor","allocationId":""}', updated_at = ?
+            WHERE json_extract(assigned_vendor, '$.allocationId') = ?
+          `).run(now, alloc.allocation_id);
+        } catch (_) {}
+      }
+
+      // 2. Clear any remaining student assignments by vendor_id
+      db.prepare('DELETE FROM student_vendor_assignments WHERE vendor_id = ?').run(vendorId);
+
+      // 3. Clear unverified payment submissions for this vendor
+      db.prepare(`
+        UPDATE payment_submissions
+        SET vendor_id = NULL, vendor_name = NULL, vendor_allocation_id = NULL, updated_at = ?
+        WHERE vendor_id = ? AND payment_status NOT IN ('Verified', 'Payment Verified')
+      `).run(now, vendorId);
+
+      // 4. Delete vendor allocations
+      db.prepare('DELETE FROM vendor_allocations WHERE vendor_id = ?').run(vendorId);
+
+      // 5. Delete vendor payment configuration
+      db.prepare('DELETE FROM vendor_payment_configurations WHERE vendor_id = ?').run(vendorId);
+
+      // 6. Delete vendor portal tokens
+      try {
+        db.prepare('DELETE FROM vendor_portal_tokens WHERE vendor_id = ?').run(vendorId);
+      } catch (_) {}
+
+      // 7. Delete the vendor record itself
+      db.prepare('DELETE FROM vendors WHERE vendor_id = ?').run(vendorId);
+
+      db.exec('COMMIT;');
+    } catch (txErr) {
+      if (db.inTransaction) {
+        try { db.exec('ROLLBACK;'); } catch (_) {}
+      }
+      throw txErr;
+    }
+
+    // Audit log
+    writeVendorAudit({
+      vendorId,
+      adminId: req.adminId,
+      action: 'VENDOR_DELETED',
+      previousValue: {
+        vendorName: vendor.vendor_name,
+        contactPerson: vendor.contact_person,
+        status: vendor.status,
+        allocationsCount: allocations.length,
+        assignedStudentsCount: assignmentCount?.count || 0
+      }
+    });
+
+    // Broadcast real-time updates
+    try {
+      bumpGlobalSyncState('VENDOR_DELETED', { vendorId });
+      sseHub.broadcast('GLOBAL_SYNC_UPDATE', { event: 'VENDOR_DELETED', vendorId });
+      sseHub.broadcast('PAYMENT_CONFIG_CHANGED', { event: 'VENDOR_DELETED', vendorId });
+      sseHub.disconnectVendorStreams(vendorId, 'Vendor has been removed by the administrator.');
+      // Re-evaluate waiting students
+      syncWaitingStudentsForVendor(null);
+    } catch (postErr) {
+      console.warn('Post-vendor deletion sync warning:', postErr.message);
+    }
+
+    return res.json({
+      success: true,
+      message: `Vendor "${vendor.vendor_name}" (${vendorId}) has been permanently deleted.`,
+      deletedVendor: {
+        vendorId,
+        vendorName: vendor.vendor_name,
+        allocationsRemoved: allocations.length,
+        studentsUnassigned: assignmentCount?.count || 0
+      }
+    });
+  } catch (err) {
+    return res.status(500).json({ success: false, message: err.message });
+  }
+});
+
 // PATCH /api/admin/vendors/:vendorId/status
 router.patch('/admin/vendors/:vendorId/status', requireAdminAuth, (req, res) => {
   try {

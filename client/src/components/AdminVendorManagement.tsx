@@ -963,6 +963,35 @@ export function AdminVendorManagement({
     }
   };
 
+  const handleDeleteVendor = async (vendor: VendorItem) => {
+    const hasStudents = vendor.allocatedStudentsCount > 0;
+    const warningMsg = hasStudents
+      ? `⚠️ WARNING: This vendor has ${vendor.allocatedStudentsCount} allocated student(s).\n\nDeleting "${vendor.vendorName}" (${vendor.vendorId}) will:\n• Remove all academic group allocations\n• Unassign all linked students\n• Delete payment configuration & QR scanners\n\nThis action is PERMANENT and cannot be undone.\n\nAre you sure?`
+      : `Are you sure you want to permanently delete "${vendor.vendorName}" (${vendor.vendorId})?\n\nThis action cannot be undone.`;
+
+    if (!window.confirm(warningMsg)) return;
+
+    try {
+      setBusy(true);
+      await ensureAdminToken();
+      const res = await fetch(`${apiBaseUrl}/api/admin/vendors/${vendor.vendorId}`, {
+        method: 'DELETE',
+        headers: authHeaders()
+      });
+      const data = await res.json();
+      if (!res.ok || !data.success) {
+        notify('error', data.message || 'Failed to delete vendor.');
+        return;
+      }
+      notify('success', data.message || `Vendor "${vendor.vendorName}" deleted successfully.`);
+      await loadDashboard();
+    } catch {
+      notify('error', 'Network error while deleting vendor.');
+    } finally {
+      setBusy(false);
+    }
+  };
+
   const handleConfirmReassignment = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!reassignModal || !reassignTargetVendorId || !reassignReason.trim()) return;
@@ -1420,6 +1449,29 @@ export function AdminVendorManagement({
                           }}
                         >
                           {v.status === 'ACTIVE' ? 'Deactivate' : 'Activate'}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleDeleteVendor(v)}
+                          disabled={busy}
+                          title={`Permanently delete ${v.vendorName}`}
+                          style={{
+                            background: '#dc2626',
+                            color: '#ffffff',
+                            border: 'none',
+                            padding: '6px 12px',
+                            borderRadius: '6px',
+                            fontWeight: 700,
+                            fontSize: '12px',
+                            cursor: busy ? 'not-allowed' : 'pointer',
+                            opacity: busy ? 0.6 : 1,
+                            marginLeft: '8px',
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: '4px'
+                          }}
+                        >
+                          <Trash2 size={12} /> Delete
                         </button>
                       </td>
                     </tr>
@@ -2367,26 +2419,67 @@ export function AdminVendorManagement({
                 <strong style={{ color: '#047857' }}>{activeVendorDetails.paymentConfig?.paymentAmount ? `₹${Number(activeVendorDetails.paymentConfig.paymentAmount).toLocaleString('en-IN')}` : 'Not Configured'}</strong>
               </p>
             </div>
-            <button
-              type="button"
-              onClick={() => handleStartEditVendor(activeVendorDetails.vendor.vendorId)}
-              style={{
-                background: '#0284c7',
-                color: '#ffffff',
-                border: 'none',
-                padding: '9px 18px',
-                borderRadius: '8px',
-                fontWeight: 700,
-                fontSize: '13px',
-                cursor: 'pointer',
-                display: 'flex',
-                alignItems: 'center',
-                gap: '8px',
-                boxShadow: '0 2px 4px rgba(2,132,199,0.2)'
-              }}
-            >
-              <Edit size={15} /> Edit This Vendor
-            </button>
+            <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
+              <button
+                type="button"
+                onClick={() => handleStartEditVendor(activeVendorDetails.vendor.vendorId)}
+                style={{
+                  background: '#0284c7',
+                  color: '#ffffff',
+                  border: 'none',
+                  padding: '9px 18px',
+                  borderRadius: '8px',
+                  fontWeight: 700,
+                  fontSize: '13px',
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '8px',
+                  boxShadow: '0 2px 4px rgba(2,132,199,0.2)'
+                }}
+              >
+                <Edit size={15} /> Edit This Vendor
+              </button>
+              <button
+                type="button"
+                onClick={async () => {
+                  await handleDeleteVendor({
+                    vendorId: activeVendorDetails.vendor.vendorId,
+                    vendorName: activeVendorDetails.vendor.vendorName,
+                    allocatedStudentsCount: activeVendorDetails.assignedStudents?.length || 0,
+                    status: activeVendorDetails.vendor.status,
+                    contactPerson: activeVendorDetails.vendor.contactPerson,
+                    mobile: activeVendorDetails.vendor.mobile,
+                    email: activeVendorDetails.vendor.email,
+                    address: activeVendorDetails.vendor.address,
+                    allocations: activeVendorDetails.allocations || [],
+                    assignedDepartments: [],
+                    assignedYears: [],
+                    assignedSections: [],
+                    activeScannersCount: 0
+                  });
+                  setViewMode('LIST');
+                }}
+                disabled={busy}
+                style={{
+                  background: '#dc2626',
+                  color: '#ffffff',
+                  border: 'none',
+                  padding: '9px 18px',
+                  borderRadius: '8px',
+                  fontWeight: 700,
+                  fontSize: '13px',
+                  cursor: busy ? 'not-allowed' : 'pointer',
+                  opacity: busy ? 0.6 : 1,
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '8px',
+                  boxShadow: '0 2px 4px rgba(220,38,38,0.2)'
+                }}
+              >
+                <Trash2 size={15} /> Delete Vendor
+              </button>
+            </div>
           </div>
 
           {/* ========================================================= */}

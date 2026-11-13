@@ -29,3 +29,4 @@ router.put('/admin/application-status/pg', updatePgStatus);
 router.post('/admin/application-status/pg', updatePgStatus);
 
 module.exports = router;
+

@@ -76,3 +76,4 @@ async function enforceStudentApplicationAccess(req, res, next) {
 }
 
 module.exports = { enforceStudentApplicationAccess };
+
