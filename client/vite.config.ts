@@ -20,7 +20,13 @@ export default defineConfig({
     }
   ],
   server: {
+    host: 'localhost',
     port: 5173,
+    strictPort: true,
+    fs: {
+      strict: true,
+      deny: ['.env', '.env.*', '*.{crt,pem}', '**/.git/**', '**/sqlite/**', '**/*.db', '**/*.sqlite'],
+    },
     proxy: {
       '/api': {
         target: 'http://127.0.0.1:4000',
