@@ -36,12 +36,7 @@ export default function ProtectedAdminRoute({ apiBaseUrl = '', children }: Prote
         headers['Authorization'] = `Bearer ${adminToken}`;
       }
 
-      const endpointPrefix =
-        apiBaseUrl ||
-        (typeof window !== 'undefined' &&
-        (window.location.port === '5173' || window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')
-          ? 'http://localhost:4000'
-          : '');
+      const endpointPrefix = apiBaseUrl || '';
 
       const res = await fetch(`${endpointPrefix}/api/admin/auth/session`, {
         method: 'GET',

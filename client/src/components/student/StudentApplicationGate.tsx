@@ -52,12 +52,7 @@ export default function StudentApplicationGate({
 
   const fetchApplicationStatus = useCallback(async () => {
     try {
-      const urlPrefix =
-        apiBaseUrl ||
-        (typeof window !== 'undefined' &&
-        (window.location.port === '5173' || window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')
-          ? 'http://localhost:4000'
-          : '');
+      const urlPrefix = apiBaseUrl || '';
 
       const res = await fetch(
         `${urlPrefix}/api/application-status?t=${Date.now()}`,
@@ -104,13 +99,13 @@ export default function StudentApplicationGate({
         // If browser autoplay policy requires muted start first, start playback and unmute on first tap
         videoEl.muted = true;
         setIsMuted(true);
-        videoEl.play().catch(() => {});
+        videoEl.play().catch(() => { });
 
         const unlockAudio = () => {
           if (videoRef.current) {
             videoRef.current.muted = false;
             setIsMuted(false);
-            videoRef.current.play().catch(() => {});
+            videoRef.current.play().catch(() => { });
           }
           window.removeEventListener('click', unlockAudio);
           window.removeEventListener('touchstart', unlockAudio);
@@ -127,7 +122,7 @@ export default function StudentApplicationGate({
     videoRef.current.muted = nextMuted;
     setIsMuted(nextMuted);
     if (!nextMuted && videoRef.current.paused) {
-      videoRef.current.play().catch(() => {});
+      videoRef.current.play().catch(() => { });
     }
   };
 
@@ -144,8 +139,8 @@ export default function StudentApplicationGate({
     const resolvedVideoSrc = appState.videoUrl?.startsWith('http')
       ? appState.videoUrl
       : appState.videoUrl?.startsWith('/uploads/')
-      ? `${apiBaseUrl}${appState.videoUrl}`
-      : appState.videoUrl || '/assets/video/application-closed.mp4';
+        ? `${apiBaseUrl}${appState.videoUrl}`
+        : appState.videoUrl || '/assets/video/application-closed.mp4';
 
     return (
       <div className="fixed inset-0 w-screen h-screen bg-black flex items-center justify-center overflow-hidden select-none z-[999999]">
@@ -159,7 +154,7 @@ export default function StudentApplicationGate({
             onEnded={() => {
               if (videoRef.current) {
                 videoRef.current.currentTime = 0;
-                videoRef.current.play().catch(() => {});
+                videoRef.current.play().catch(() => { });
               }
             }}
             className="w-full h-full object-contain"

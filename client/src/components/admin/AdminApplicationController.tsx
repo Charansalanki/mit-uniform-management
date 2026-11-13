@@ -113,9 +113,6 @@ export default function AdminApplicationController({
 
   const getApiEndpoint = useCallback((path: string) => {
     if (apiBaseUrl) return `${apiBaseUrl}${path}`;
-    if (typeof window !== 'undefined' && (window.location.port === '5173' || window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')) {
-      return `http://localhost:4000${path}`;
-    }
     return path;
   }, [apiBaseUrl]);
 
@@ -209,7 +206,7 @@ export default function AdminApplicationController({
     }, 500);
 
     const abortCtrl = new AbortController();
-    const timeoutTimer = setTimeout(() => abortCtrl.abort(), 6000);
+    const timeoutTimer = setTimeout(() => abortCtrl.abort(), 10000);
 
     // Target dedicated atomic endpoint for UG or PG when available
     let targetEndpoint = '/api/admin/application-controller/status';
