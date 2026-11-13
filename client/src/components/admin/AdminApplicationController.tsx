@@ -111,10 +111,18 @@ export default function AdminApplicationController({
     [getEffectiveToken]
   );
 
+  const getApiEndpoint = useCallback((path: string) => {
+    if (apiBaseUrl) return `${apiBaseUrl}${path}`;
+    if (typeof window !== 'undefined' && window.location.port === '5173') {
+      return `http://localhost:4000${path}`;
+    }
+    return path;
+  }, [apiBaseUrl]);
+
   const loadControllerState = useCallback(async () => {
     try {
       const res = await fetch(
-        `${apiBaseUrl}/api/admin/application-controller?t=${Date.now()}`,
+        getApiEndpoint(`/api/admin/application-controller?t=${Date.now()}`),
         {
           method: 'GET',
           credentials: 'include',
@@ -132,7 +140,7 @@ export default function AdminApplicationController({
     } catch (err) {
       console.error('Failed to load UG/PG Application Controller state:', err);
     }
-  }, [apiBaseUrl, buildHeaders]);
+  }, [getApiEndpoint, buildHeaders]);
 
   useEffect(() => {
     loadControllerState();
@@ -205,7 +213,7 @@ export default function AdminApplicationController({
 
     try {
       const res = await fetch(
-        `${apiBaseUrl}/api/admin/application-controller/status`,
+        getApiEndpoint('/api/admin/application-controller/status'),
         {
           method: 'PATCH',
           credentials: 'include',
@@ -294,7 +302,7 @@ export default function AdminApplicationController({
 
       const headers = buildHeaders(false);
       const res = await fetch(
-        `${apiBaseUrl}/api/admin/application-controller/upload-video`,
+        getApiEndpoint('/api/admin/application-controller/upload-video'),
         {
           method: 'POST',
           credentials: 'include',

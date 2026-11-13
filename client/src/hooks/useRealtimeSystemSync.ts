@@ -28,7 +28,11 @@ export function useRealtimeSystemSync({
       if (es && es.readyState === EventSource.OPEN && Math.random() > 0.15) return;
 
       try {
-        const urlPrefix = apiBaseUrl ? apiBaseUrl.replace(/\/$/, '') : '';
+        const urlPrefix =
+        apiBaseUrl ||
+        (typeof window !== 'undefined' && window.location.port === '5173'
+          ? 'http://localhost:4000'
+          : '');
         const res = await fetch(`${urlPrefix}/api/sync/version?t=${Date.now()}`, {
           cache: 'no-store'
         });
@@ -52,7 +56,11 @@ export function useRealtimeSystemSync({
     // Instant SSE stream listener
     let es: EventSource | null = null;
     try {
-      const urlPrefix = apiBaseUrl ? apiBaseUrl.replace(/\/$/, '') : '';
+      const urlPrefix =
+        apiBaseUrl ||
+        (typeof window !== 'undefined' && window.location.port === '5173'
+          ? 'http://localhost:4000'
+          : '');
       es = new EventSource(`${urlPrefix}/api/sse/payment-config`);
       es.addEventListener('GLOBAL_SYNC_UPDATE', (event) => {
         try {
