@@ -490,119 +490,137 @@ export default function AdminApplicationController({
       {/* TWO INDEPENDENT CONTROL CARDS: 1. UG APPLICATION | 2. PG APPLICATION */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         {/* CARD 1: UG APPLICATION CONTROL */}
-        <div
-          className={`bg-white rounded-2xl border-2 shadow-sm p-6 flex flex-col justify-between space-y-5 transition-all ${
-            ugApplicationOpen ? 'border-emerald-500/80 ring-1 ring-emerald-500/20' : 'border-rose-400 ring-1 ring-rose-400/20'
-          }`}
-        >
-          <div className="space-y-4">
-            <div className="flex items-start justify-between gap-3">
-              <div>
-                <span className="inline-flex items-center gap-1.5 text-[11px] font-black uppercase tracking-wider text-blue-700 bg-blue-50 px-2.5 py-0.5 rounded-md border border-blue-200">
+        <div className="relative bg-white rounded-2xl border border-slate-200 shadow-sm hover:shadow-md transition-all duration-200 overflow-hidden flex flex-col justify-between">
+          {/* Top color indicator accent */}
+          <div className={`h-1.5 w-full ${ugApplicationOpen ? 'bg-emerald-500' : 'bg-rose-500'} transition-colors duration-200`} />
+
+          <div className="p-6 space-y-5">
+            {/* Card Header */}
+            <div className="flex items-start justify-between gap-4">
+              <div className="space-y-1">
+                <span className="inline-flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-wider text-blue-700 bg-blue-50 px-2.5 py-0.5 rounded-md border border-blue-200/80">
                   <GraduationCap size={13} className="text-blue-600" />
                   Undergraduate (B.E. / B.Tech.)
                 </span>
-                <h3 className="text-xl font-black text-slate-900 mt-1 tracking-tight">
+                <h3 className="text-xl font-bold text-slate-900 tracking-tight">
                   UG Application
                 </h3>
+                <p className="text-xs text-slate-500 leading-normal">
+                  Controls uniform registration and payment submission for all 11 Undergraduate departments.
+                </p>
               </div>
 
-              <button
-                type="button"
-                onClick={() => handleToggleUg(!ugApplicationOpen)}
-                title="Click to toggle UG Application status"
-                className={`px-3 py-1 rounded-full text-xs font-black border shadow-xs cursor-pointer transition-transform hover:scale-105 ${
-                  ugApplicationOpen
-                    ? 'bg-emerald-100 text-emerald-900 border-emerald-300 hover:bg-emerald-200'
-                    : 'bg-rose-100 text-rose-900 border-rose-300 hover:bg-rose-200'
-                }`}
-              >
-                Status: {ugApplicationOpen ? 'ON (Open)' : 'OFF (Closed)'}
-              </button>
+              {/* Status Indicator Badge */}
+              <div className="shrink-0">
+                {ugApplicationOpen ? (
+                  <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-emerald-50 border border-emerald-200 shadow-xs">
+                    <span className="relative flex h-2 w-2">
+                      <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
+                      <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500" />
+                    </span>
+                    <span className="text-xs font-bold text-emerald-800 tracking-tight">Status: ON</span>
+                  </div>
+                ) : (
+                  <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-rose-50 border border-rose-200 shadow-xs">
+                    <span className="h-2 w-2 rounded-full bg-rose-500" />
+                    <span className="text-xs font-bold text-rose-800 tracking-tight">Status: OFF</span>
+                  </div>
+                )}
+              </div>
             </div>
 
-            <p className="text-xs text-slate-600 leading-relaxed font-normal">
-              Controls uniform registration and payment submission for all 11 Undergraduate departments:
-            </p>
-
-            <div className="flex flex-wrap gap-1.5">
-              {['CS', 'CA', 'CI', 'CE', 'CD', 'IC', 'IS', 'EC', 'ME', 'CV', 'CB'].map((code) => (
-                <span
-                  key={code}
-                  className="px-2 py-0.5 text-[10px] font-extrabold rounded-md bg-slate-100 text-slate-700 border border-slate-200"
-                >
-                  {code}
-                </span>
-              ))}
-            </div>
-
-            {/* Independent UG ON / OFF Toggle Buttons */}
+            {/* Department Badges */}
             <div className="space-y-1.5">
-              <div className="bg-slate-100/90 p-1.5 rounded-xl border border-slate-200 grid grid-cols-2 gap-2">
+              <div className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">
+                Applicable Departments (11 Branches)
+              </div>
+              <div className="flex flex-wrap gap-1.5">
+                {['CS', 'CA', 'CI', 'CE', 'CD', 'IC', 'IS', 'EC', 'ME', 'CV', 'CB'].map((code) => (
+                  <span
+                    key={code}
+                    className="px-2.5 py-0.5 text-[11px] font-semibold rounded-md bg-slate-50 text-slate-700 border border-slate-200 hover:bg-slate-100 transition-colors"
+                  >
+                    {code}
+                  </span>
+                ))}
+              </div>
+            </div>
+
+            {/* Segmented Controller (Power Toggle) */}
+            <div className="space-y-2 pt-1">
+              <div className="bg-slate-100 p-1.5 rounded-xl border border-slate-200/90 grid grid-cols-2 gap-2">
                 <button
                   type="button"
                   onClick={() => handleToggleUg(true)}
-                  className={`py-3 rounded-lg text-xs font-black transition-all flex items-center justify-center gap-1.5 cursor-pointer active:scale-95 ${
+                  disabled={busyAction === 'UG_ON' || busyAction === 'UG_OFF'}
+                  className={`py-2.5 px-3 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-2 cursor-pointer active:scale-98 ${
                     ugApplicationOpen
-                      ? 'bg-emerald-600 text-white shadow-md ring-2 ring-emerald-500/40'
-                      : 'bg-white text-slate-700 hover:bg-slate-50 border border-slate-200 hover:border-slate-300'
+                      ? 'bg-emerald-600 text-white shadow-sm ring-1 ring-emerald-600/30'
+                      : 'text-slate-600 hover:text-slate-900 hover:bg-white/80'
                   }`}
                 >
                   {busyAction === 'UG_ON' ? (
                     <Loader2 size={14} className="animate-spin text-white" />
                   ) : (
-                    <Power size={14} />
+                    <Power size={14} className={ugApplicationOpen ? 'text-white' : 'text-slate-400'} />
                   )}
                   <span>UG Application: ON</span>
                 </button>
                 <button
                   type="button"
                   onClick={() => handleToggleUg(false)}
-                  className={`py-3 rounded-lg text-xs font-black transition-all flex items-center justify-center gap-1.5 cursor-pointer active:scale-95 ${
+                  disabled={busyAction === 'UG_ON' || busyAction === 'UG_OFF'}
+                  className={`py-2.5 px-3 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-2 cursor-pointer active:scale-98 ${
                     !ugApplicationOpen
-                      ? 'bg-rose-600 text-white shadow-md ring-2 ring-rose-500/40'
-                      : 'bg-white text-slate-700 hover:bg-slate-50 border border-slate-200 hover:border-slate-300'
+                      ? 'bg-rose-600 text-white shadow-sm ring-1 ring-rose-600/30'
+                      : 'text-slate-600 hover:text-slate-900 hover:bg-white/80'
                   }`}
                 >
                   {busyAction === 'UG_OFF' ? (
                     <Loader2 size={14} className="animate-spin text-white" />
                   ) : (
-                    <Power size={14} />
+                    <Power size={14} className={!ugApplicationOpen ? 'text-white' : 'text-slate-400'} />
                   )}
                   <span>UG Application: OFF</span>
                 </button>
               </div>
 
-              <div className="flex items-center justify-between text-[11px] font-semibold px-1">
+              <div className="flex items-center justify-between text-[11px] font-medium px-1">
                 <span className={`flex items-center gap-1.5 ${ugApplicationOpen ? 'text-emerald-700' : 'text-rose-600'}`}>
                   <span className={`w-2 h-2 rounded-full ${ugApplicationOpen ? 'bg-emerald-500 animate-pulse' : 'bg-rose-500'}`} />
                   {ugApplicationOpen
                     ? 'UG registrations and payments active'
-                    : 'UG registration closed'}
+                    : 'UG registration and payment closed'}
                 </span>
                 {busyAction === 'UG_ON' || busyAction === 'UG_OFF' ? (
-                  <span className="text-blue-600 font-bold animate-pulse text-[10px]">Instant Saved</span>
+                  <span className="text-blue-600 font-bold animate-pulse text-[10px]">Saving...</span>
                 ) : null}
               </div>
             </div>
 
-            <div>
-              <label className="block text-xs font-bold text-slate-700 mb-1">
-                UG Closed Notice Message
-              </label>
+            {/* Notice Message */}
+            <div className="space-y-1.5 pt-1">
+              <div className="flex items-center justify-between">
+                <label className="text-xs font-bold text-slate-700">
+                  UG Closed Notice Message
+                </label>
+                <span className="text-[10px] text-slate-400">Shown when status is OFF</span>
+              </div>
               <textarea
                 rows={3}
                 value={ugMsgInput}
                 onChange={(e) => setUgMsgInput(e.target.value)}
-                className="w-full px-3 py-2 text-xs border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                className="w-full px-3.5 py-2.5 text-xs text-slate-800 border border-slate-200 rounded-xl bg-slate-50/60 focus:bg-white focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 focus:outline-none transition-all resize-none shadow-xs leading-relaxed"
                 placeholder="Undergraduate (B.E. / B.Tech.) uniform registration is currently closed."
               />
             </div>
           </div>
 
-          <div className="pt-3 border-t border-slate-100 flex items-center justify-between text-[11px] text-slate-500 font-medium">
-            <span>
-              Changed by: <strong className="text-slate-800 font-bold">{controller.ugUpdatedBy}</strong>
+          {/* Footer Metadata */}
+          <div className="px-6 py-3.5 bg-slate-50/80 border-t border-slate-100 flex items-center justify-between text-[11px] text-slate-500">
+            <span className="flex items-center gap-1.5">
+              <Clock size={12} className="text-slate-400" />
+              Changed by: <strong className="text-slate-700 font-bold">{controller.ugUpdatedBy}</strong>
             </span>
             <span>
               {controller.ugUpdatedAt
@@ -616,119 +634,137 @@ export default function AdminApplicationController({
         </div>
 
         {/* CARD 2: PG APPLICATION CONTROL */}
-        <div
-          className={`bg-white rounded-2xl border-2 shadow-sm p-6 flex flex-col justify-between space-y-5 transition-all ${
-            pgApplicationOpen ? 'border-emerald-500/80 ring-1 ring-emerald-500/20' : 'border-rose-400 ring-1 ring-rose-400/20'
-          }`}
-        >
-          <div className="space-y-4">
-            <div className="flex items-start justify-between gap-3">
-              <div>
-                <span className="inline-flex items-center gap-1.5 text-[11px] font-black uppercase tracking-wider text-purple-700 bg-purple-50 px-2.5 py-0.5 rounded-md border border-purple-200">
+        <div className="relative bg-white rounded-2xl border border-slate-200 shadow-sm hover:shadow-md transition-all duration-200 overflow-hidden flex flex-col justify-between">
+          {/* Top color indicator accent */}
+          <div className={`h-1.5 w-full ${pgApplicationOpen ? 'bg-emerald-500' : 'bg-rose-500'} transition-colors duration-200`} />
+
+          <div className="p-6 space-y-5">
+            {/* Card Header */}
+            <div className="flex items-start justify-between gap-4">
+              <div className="space-y-1">
+                <span className="inline-flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-wider text-purple-700 bg-purple-50 px-2.5 py-0.5 rounded-md border border-purple-200/80">
                   <BookOpen size={13} className="text-purple-600" />
                   Postgraduate (MBA / MCA / M.Tech.)
                 </span>
-                <h3 className="text-xl font-black text-slate-900 mt-1 tracking-tight">
+                <h3 className="text-xl font-bold text-slate-900 tracking-tight">
                   PG Application
                 </h3>
+                <p className="text-xs text-slate-500 leading-normal">
+                  Controls uniform registration and payment submission for all Postgraduate programs.
+                </p>
               </div>
 
-              <button
-                type="button"
-                onClick={() => handleTogglePg(!pgApplicationOpen)}
-                title="Click to toggle PG Application status"
-                className={`px-3 py-1 rounded-full text-xs font-black border shadow-xs cursor-pointer transition-transform hover:scale-105 ${
-                  pgApplicationOpen
-                    ? 'bg-emerald-100 text-emerald-900 border-emerald-300 hover:bg-emerald-200'
-                    : 'bg-rose-100 text-rose-900 border-rose-300 hover:bg-rose-200'
-                }`}
-              >
-                Status: {pgApplicationOpen ? 'ON (Open)' : 'OFF (Closed)'}
-              </button>
+              {/* Status Indicator Badge */}
+              <div className="shrink-0">
+                {pgApplicationOpen ? (
+                  <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-emerald-50 border border-emerald-200 shadow-xs">
+                    <span className="relative flex h-2 w-2">
+                      <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
+                      <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500" />
+                    </span>
+                    <span className="text-xs font-bold text-emerald-800 tracking-tight">Status: ON</span>
+                  </div>
+                ) : (
+                  <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-rose-50 border border-rose-200 shadow-xs">
+                    <span className="h-2 w-2 rounded-full bg-rose-500" />
+                    <span className="text-xs font-bold text-rose-800 tracking-tight">Status: OFF</span>
+                  </div>
+                )}
+              </div>
             </div>
 
-            <p className="text-xs text-slate-600 leading-relaxed font-normal">
-              Controls uniform registration and payment submission for all Postgraduate programs:
-            </p>
-
-            <div className="flex flex-wrap gap-1.5">
-              {['MBA (BA)', 'MCA (MC)', 'M.Tech.'].map((code) => (
-                <span
-                  key={code}
-                  className="px-2 py-0.5 text-[10px] font-extrabold rounded-md bg-purple-50 text-purple-800 border border-purple-200"
-                >
-                  {code}
-                </span>
-              ))}
-            </div>
-
-            {/* Independent PG ON / OFF Toggle Buttons */}
+            {/* Department Badges */}
             <div className="space-y-1.5">
-              <div className="bg-slate-100/90 p-1.5 rounded-xl border border-slate-200 grid grid-cols-2 gap-2">
+              <div className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">
+                Applicable Programs (3 Master's Degrees)
+              </div>
+              <div className="flex flex-wrap gap-1.5">
+                {['MBA (BA)', 'MCA (MC)', 'M.Tech.'].map((code) => (
+                  <span
+                    key={code}
+                    className="px-2.5 py-0.5 text-[11px] font-semibold rounded-md bg-purple-50 text-purple-800 border border-purple-200/80 hover:bg-purple-100 transition-colors"
+                  >
+                    {code}
+                  </span>
+                ))}
+              </div>
+            </div>
+
+            {/* Segmented Controller (Power Toggle) */}
+            <div className="space-y-2 pt-1">
+              <div className="bg-slate-100 p-1.5 rounded-xl border border-slate-200/90 grid grid-cols-2 gap-2">
                 <button
                   type="button"
                   onClick={() => handleTogglePg(true)}
-                  className={`py-3 rounded-lg text-xs font-black transition-all flex items-center justify-center gap-1.5 cursor-pointer active:scale-95 ${
+                  disabled={busyAction === 'PG_ON' || busyAction === 'PG_OFF'}
+                  className={`py-2.5 px-3 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-2 cursor-pointer active:scale-98 ${
                     pgApplicationOpen
-                      ? 'bg-emerald-600 text-white shadow-md ring-2 ring-emerald-500/40'
-                      : 'bg-white text-slate-700 hover:bg-slate-50 border border-slate-200 hover:border-slate-300'
+                      ? 'bg-emerald-600 text-white shadow-sm ring-1 ring-emerald-600/30'
+                      : 'text-slate-600 hover:text-slate-900 hover:bg-white/80'
                   }`}
                 >
                   {busyAction === 'PG_ON' ? (
                     <Loader2 size={14} className="animate-spin text-white" />
                   ) : (
-                    <Power size={14} />
+                    <Power size={14} className={pgApplicationOpen ? 'text-white' : 'text-slate-400'} />
                   )}
                   <span>PG Application: ON</span>
                 </button>
                 <button
                   type="button"
                   onClick={() => handleTogglePg(false)}
-                  className={`py-3 rounded-lg text-xs font-black transition-all flex items-center justify-center gap-1.5 cursor-pointer active:scale-95 ${
+                  disabled={busyAction === 'PG_ON' || busyAction === 'PG_OFF'}
+                  className={`py-2.5 px-3 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-2 cursor-pointer active:scale-98 ${
                     !pgApplicationOpen
-                      ? 'bg-rose-600 text-white shadow-md ring-2 ring-rose-500/40'
-                      : 'bg-white text-slate-700 hover:bg-slate-50 border border-slate-200 hover:border-slate-300'
+                      ? 'bg-rose-600 text-white shadow-sm ring-1 ring-rose-600/30'
+                      : 'text-slate-600 hover:text-slate-900 hover:bg-white/80'
                   }`}
                 >
                   {busyAction === 'PG_OFF' ? (
                     <Loader2 size={14} className="animate-spin text-white" />
                   ) : (
-                    <Power size={14} />
+                    <Power size={14} className={!pgApplicationOpen ? 'text-white' : 'text-slate-400'} />
                   )}
                   <span>PG Application: OFF</span>
                 </button>
               </div>
 
-              <div className="flex items-center justify-between text-[11px] font-semibold px-1">
+              <div className="flex items-center justify-between text-[11px] font-medium px-1">
                 <span className={`flex items-center gap-1.5 ${pgApplicationOpen ? 'text-emerald-700' : 'text-rose-600'}`}>
                   <span className={`w-2 h-2 rounded-full ${pgApplicationOpen ? 'bg-emerald-500 animate-pulse' : 'bg-rose-500'}`} />
                   {pgApplicationOpen
                     ? 'PG registrations and payments active'
-                    : 'PG registration closed'}
+                    : 'PG registration and payment closed'}
                 </span>
                 {busyAction === 'PG_ON' || busyAction === 'PG_OFF' ? (
-                  <span className="text-purple-600 font-bold animate-pulse text-[10px]">Instant Saved</span>
+                  <span className="text-purple-600 font-bold animate-pulse text-[10px]">Saving...</span>
                 ) : null}
               </div>
             </div>
 
-            <div>
-              <label className="block text-xs font-bold text-slate-700 mb-1">
-                PG Closed Notice Message
-              </label>
+            {/* Notice Message */}
+            <div className="space-y-1.5 pt-1">
+              <div className="flex items-center justify-between">
+                <label className="text-xs font-bold text-slate-700">
+                  PG Closed Notice Message
+                </label>
+                <span className="text-[10px] text-slate-400">Shown when status is OFF</span>
+              </div>
               <textarea
                 rows={3}
                 value={pgMsgInput}
                 onChange={(e) => setPgMsgInput(e.target.value)}
-                className="w-full px-3 py-2 text-xs border border-slate-300 rounded-xl focus:ring-2 focus:ring-purple-500 focus:outline-none"
+                className="w-full px-3.5 py-2.5 text-xs text-slate-800 border border-slate-200 rounded-xl bg-slate-50/60 focus:bg-white focus:border-purple-500 focus:ring-2 focus:ring-purple-500/20 focus:outline-none transition-all resize-none shadow-xs leading-relaxed"
                 placeholder="Postgraduate (MBA / MCA / M.Tech.) uniform registration is currently closed."
               />
             </div>
           </div>
 
-          <div className="pt-3 border-t border-slate-100 flex items-center justify-between text-[11px] text-slate-500 font-medium">
-            <span>
-              Changed by: <strong className="text-slate-800 font-bold">{controller.pgUpdatedBy}</strong>
+          {/* Footer Metadata */}
+          <div className="px-6 py-3.5 bg-slate-50/80 border-t border-slate-100 flex items-center justify-between text-[11px] text-slate-500">
+            <span className="flex items-center gap-1.5">
+              <Clock size={12} className="text-slate-400" />
+              Changed by: <strong className="text-slate-700 font-bold">{controller.pgUpdatedBy}</strong>
             </span>
             <span>
               {controller.pgUpdatedAt

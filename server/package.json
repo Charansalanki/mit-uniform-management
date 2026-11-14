@@ -3,7 +3,7 @@
     "version": "1.0.0",
     "type": "module",
     "scripts": {
-        "dev": "node --watch index.js",
+        "dev": "node --watch-path=index.js --watch-path=db.js --watch-path=cache.js --watch-path=adminAuthRoutes.js --watch-path=adminDataMaintenanceRoutes.js --watch-path=applicationControlRoutes.js --watch-path=cashPaymentRoutes.js --watch-path=paymentRoutes.js --watch-path=paymentUpload.js --watch-path=sseHub.js --watch-path=sseRoutes.js --watch-path=studentTrackingRoutes.js --watch-path=vendorPortalAuth.js --watch-path=vendorPortalRoutes.js --watch-path=vendorRoutes.js --watch-path=config --watch-path=middleware --watch-path=utils index.js",
         "start": "node index.js"
     },
     "dependencies": {
