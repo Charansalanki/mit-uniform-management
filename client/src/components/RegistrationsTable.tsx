@@ -1310,6 +1310,7 @@ export function RegistrationsTable({
               <div className="slip-header">
                 <div className="slip-crest">
                   <img
+                    alt="MIT Mysore Logo"
                     src="/logo.png"
                     onError={(e) => {
                       const target = e.currentTarget;
@@ -1317,7 +1318,6 @@ export function RegistrationsTable({
                         target.src = MIT_SEAL_LOGO_BASE64;
                       }
                     }}
-                    alt="MIT Mysore Logo"
                     className="slip-crest-img"
                   />
                 </div>

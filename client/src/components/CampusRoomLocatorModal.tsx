@@ -233,6 +233,7 @@ export function CampusRoomLocatorModal({
           <aside className="locorom-sidebar">
             <div className="locorom-logo-card">
               <img
+                alt="MITM Crest"
                 src="/logo.png"
                 onError={(e) => {
                   const target = e.currentTarget;
@@ -240,7 +241,6 @@ export function CampusRoomLocatorModal({
                     target.src = MIT_SEAL_LOGO_BASE64;
                   }
                 }}
-                alt="MITM Crest"
                 className="locorom-crest-img"
               />
               <div className="locorom-logo-text">

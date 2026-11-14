@@ -19,7 +19,8 @@ import {
   History,
   ChevronDown,
   ChevronRight,
-  Power
+  Power,
+  type LucideIcon
 } from 'lucide-react';
 import { StudentRegistration, DistributionSchedule, AdminSummary, PaymentStats } from './types';
 import { api, calculateSummary } from './api';
@@ -36,8 +37,17 @@ import { AdminVendorManagement } from './components/AdminVendorManagement';
 import { MIT_SEAL_LOGO_BASE64 } from './utils/mitLogoBase64';
 import { useRealtimeSystemSync } from './hooks/useRealtimeSystemSync';
 
+export interface AdminProfile {
+  id?: string | number;
+  username?: string;
+  name?: string;
+  email?: string;
+  role?: string;
+  [key: string]: unknown;
+}
+
 export interface AppProps {
-  adminProfile?: any;
+  adminProfile?: AdminProfile;
   onLogout?: () => void;
 }
 
@@ -124,7 +134,9 @@ export default function App({ adminProfile, onLogout }: AppProps = {}) {
   };
 
   // Actions
-  const handleAddRegistration = async (data: any): Promise<StudentRegistration> => {
+  const handleAddRegistration = async (
+    data: Omit<StudentRegistration, 'id' | 'submitted_at' | 'edit_deadline' | 'collected_at' | 'collected_by'>
+  ): Promise<StudentRegistration> => {
     const saved = await api.addRegistration(data);
     const updated = [saved, ...registrations];
     syncSummary(updated);
@@ -158,7 +170,9 @@ export default function App({ adminProfile, onLogout }: AppProps = {}) {
     showToast('Registration deleted', 'info');
   };
 
-  const handleSaveSchedule = async (schedule: any) => {
+  const handleSaveSchedule = async (
+    schedule: Omit<DistributionSchedule, 'id' | 'updated_at'> & { id?: string }
+  ) => {
     const saved = await api.saveSchedule(schedule);
     const existing = schedules.some(s => s.id === saved.id);
     const list = existing ? schedules.map(s => (s.id === saved.id ? saved : s)) : [...schedules, saved];
@@ -207,7 +221,7 @@ export default function App({ adminProfile, onLogout }: AppProps = {}) {
 
   interface NavItem {
     name: string;
-    icon: any;
+    icon: LucideIcon;
     badge?: number;
   }
 
@@ -224,7 +238,7 @@ export default function App({ adminProfile, onLogout }: AppProps = {}) {
   const paymentSubItems: Array<{
     id: PaymentControllerTab;
     label: string;
-    icon: any;
+    icon: LucideIcon;
     badge?: number;
   }> = [
       {
@@ -276,6 +290,7 @@ export default function App({ adminProfile, onLogout }: AppProps = {}) {
         <div className="brand">
           <div className="crest">
             <img
+              alt="MIT Mysore Logo"
               src="/mit-logo.png"
               onError={(e) => {
                 const target = e.currentTarget;
@@ -285,7 +300,6 @@ export default function App({ adminProfile, onLogout }: AppProps = {}) {
                   target.src = MIT_SEAL_LOGO_BASE64;
                 }
               }}
-              alt="MIT Mysore Logo"
               className="mit-admin-crest-img"
             />
           </div>

@@ -52,6 +52,7 @@ export default function SchedulesPage() {
         <div className="nav-brand">
           <div className="nav-logo">
             <img
+              alt="MIT Mysore Logo"
               src="/logo.png"
               onError={(e) => {
                 const target = e.currentTarget;
@@ -59,7 +60,6 @@ export default function SchedulesPage() {
                   target.src = MIT_SEAL_LOGO_BASE64;
                 }
               }}
-              alt="MIT Mysore Logo"
               className="mit-official-logo"
             />
           </div>
