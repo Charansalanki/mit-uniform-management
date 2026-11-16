@@ -4,6 +4,12 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0" />
     <title>MIT Mysore – Uniform Registration Portal</title>
+    <script>
+      // Automatic routing: If accessing on an admin domain, immediately route to Admin Panel
+      if (typeof window !== 'undefined' && window.location.hostname.includes('admin') && (window.location.pathname === '/' || window.location.pathname === '/index.html')) {
+        window.location.replace('/admin.html');
+      }
+    </script>
     <meta name="description" content="Register for your MIT Mysore campus uniform. Fill in your details, choose your sizes, and submit your registration quickly and easily." />
     <meta name="theme-color" content="#0f172a" />
     <link rel="icon" type="image/png" href="/logo.png" />

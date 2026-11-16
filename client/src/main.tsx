@@ -3,21 +3,23 @@ import { createRoot } from 'react-dom/client';
 import StudentPortal from './StudentPortal';
 import VendorPortalPage from './pages/VendorPortalPage';
 import StudentApplicationGate from './components/student/StudentApplicationGate';
+import ProtectedAdminRoute from './components/admin/ProtectedAdminRoute';
+import App from './App';
 import './style.css';
 
 // Immediately evict any stale service workers in the browser to prevent network request stalling
 if (typeof navigator !== 'undefined' && 'serviceWorker' in navigator) {
   navigator.serviceWorker.getRegistrations().then((registrations) => {
     for (const registration of registrations) {
-      registration.unregister().catch(() => {});
+      registration.unregister().catch(() => { });
     }
-  }).catch(() => {});
+  }).catch(() => { });
   if (typeof caches !== 'undefined') {
     caches.keys().then((names) => {
       for (const name of names) {
-        caches.delete(name).catch(() => {});
+        caches.delete(name).catch(() => { });
       }
-    }).catch(() => {});
+    }).catch(() => { });
   }
 }
 
@@ -26,14 +28,27 @@ const isVendorPortal = typeof window !== 'undefined' && (
   window.location.pathname.includes('vendor-portal')
 );
 
+const isAdminApp = typeof window !== 'undefined' && (
+  (import.meta as any).env?.VITE_APP_MODE === 'admin' ||
+  window.location.pathname.startsWith('/admin') ||
+  window.location.hostname.includes('admin')
+);
+
 createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
-    {isVendorPortal ? (
-      <VendorPortalPage />
-    ) : (
-      <StudentApplicationGate>
-        <StudentPortal />
-      </StudentApplicationGate>
-    )}
-  </React.StrictMode>
+      {
+        isAdminApp?(
+      <ProtectedAdminRoute>
+      {({ adminProfile, handleLogout }) => (
+    <App adminProfile={adminProfile} onLogout={handleLogout} />
+        )}
+  </ProtectedAdminRoute>
+) : isVendorPortal ? (
+  <VendorPortalPage />
+) : (
+  <StudentApplicationGate>
+    <StudentPortal />
+  </StudentApplicationGate>
+)}
+  </React.StrictMode >
 );

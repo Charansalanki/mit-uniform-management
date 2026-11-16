@@ -1,0 +1,19 @@
+version: '3.8'
+
+services:
+  mit-uniform-api:
+    build:
+      context: ../..
+      dockerfile: infrastructure/docker/Dockerfile
+    container_name: mit-uniform-backend
+    restart: always
+    ports:
+      - "4000:4000"
+    environment:
+      - PORT=4000
+      - NODE_ENV=production
+      - JWT_SECRET=change_me_to_a_secure_production_secret
+      - CORS_ORIGINS=https://uniforms.mitmysore.in,https://admin.mitmysore.in
+    volumes:
+      - ../../server/data:/app/data
+      - ../../server/uploads:/app/uploads

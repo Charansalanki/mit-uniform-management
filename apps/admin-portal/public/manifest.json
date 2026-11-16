@@ -1,0 +1,36 @@
+{
+  "name": "MITM Navigo",
+  "short_name": "Navigo",
+  "description": "Official indoor visual wayfinding and step-by-step corridor photo walkthroughs for Maharaja Institute of Technology Mysore.",
+  "id": "mitm-navigo-app-v4",
+  "start_url": "./index.html",
+  "scope": "./",
+  "display": "standalone",
+  "display_override": [
+    "standalone",
+    "window-controls-overlay"
+  ],
+  "orientation": "portrait-primary",
+  "background_color": "#ffffff",
+  "theme_color": "#0b57d0",
+  "icons": [
+    {
+      "src": "icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "logo.png",
+      "sizes": "554x554",
+      "type": "image/png",
+      "purpose": "any"
+    }
+  ]
+}
