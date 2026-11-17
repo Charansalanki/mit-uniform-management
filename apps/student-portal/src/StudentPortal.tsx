@@ -9,7 +9,10 @@ import {
   CheckCircle2,
   Info,
   Compass,
-  Search
+  Search,
+  Menu,
+  X,
+  CreditCard
 } from 'lucide-react';
 import { api } from './api';
 import { ShirtSize, TrouserSize, DistributionSchedule, Gender } from './types';
@@ -123,6 +126,7 @@ export default function StudentPortal() {
     }
     return 'REGISTRATION';
   });
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
   const {
     ugApplicationOpen,
@@ -533,7 +537,8 @@ export default function StudentPortal() {
             <small>Uniform Registration Portal</small>
           </div>
         </div>
-        <div className="nav-right">
+        {/* Desktop Navigation Links */}
+        <div className="nav-right nav-desktop-actions">
           <button
             type="button"
             onClick={() => setActivePortalView('COMPLETE_PAYMENT')}
@@ -546,7 +551,8 @@ export default function StudentPortal() {
               gap: '6px',
               border: 'none',
               cursor: 'pointer',
-              fontWeight: 700
+              fontWeight: 700,
+              whiteSpace: 'nowrap'
             }}
             title="Complete Pending Uniform Payment"
           >
@@ -564,17 +570,28 @@ export default function StudentPortal() {
               gap: '6px',
               border: 'none',
               cursor: 'pointer',
-              fontWeight: 700
+              fontWeight: 700,
+              whiteSpace: 'nowrap'
             }}
             title="Check Payment & Application Status"
           >
             <Search size={13} /> Check Status
           </button>
-          <span className="nav-badge"><Calendar size={13} style={{ display: 'inline', marginRight: 4, verticalAlign: 'middle' }} />{campaign}</span>
+          <span className="nav-badge" style={{ whiteSpace: 'nowrap' }}>
+            <Calendar size={13} style={{ display: 'inline', marginRight: 4, verticalAlign: 'middle' }} />{campaign}
+          </span>
           <a
             href="/navigation.html"
             className="nav-sched-btn"
-            style={{ background: '#16a34a', color: '#fff', display: 'inline-flex', alignItems: 'center', gap: '5px', textDecoration: 'none' }}
+            style={{
+              background: '#16a34a',
+              color: '#fff',
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '5px',
+              textDecoration: 'none',
+              whiteSpace: 'nowrap'
+            }}
             title="Find the Room"
           >
             <Compass size={13} /> Find the Room
@@ -584,11 +601,112 @@ export default function StudentPortal() {
             target="_blank"
             rel="noopener noreferrer"
             className="nav-sched-btn"
+            style={{ whiteSpace: 'nowrap' }}
             title="View Published Distribution Schedules"
           >
             Schedules
           </a>
         </div>
+
+        {/* Mobile Navigation Actions */}
+        <div className="nav-mobile-actions">
+          <button
+            type="button"
+            onClick={() => {
+              setActivePortalView(activePortalView === 'CHECK_STATUS' ? 'REGISTRATION' : 'CHECK_STATUS');
+              setIsMobileMenuOpen(false);
+            }}
+            className="nav-mobile-quick-btn"
+            title="Check Status"
+          >
+            <Search size={13} /> Status
+          </button>
+          <button
+            type="button"
+            onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
+            className="nav-mobile-menu-toggle"
+            aria-label="Toggle navigation menu"
+            aria-expanded={isMobileMenuOpen}
+          >
+            {isMobileMenuOpen ? <X size={20} /> : <Menu size={20} />}
+          </button>
+        </div>
+
+        {/* Mobile Drawer Dropdown */}
+        {isMobileMenuOpen && (
+          <div className="nav-mobile-dropdown">
+            <div className="nav-mobile-dropdown-header">
+              <span className="nav-badge" style={{ margin: 0 }}>
+                <Calendar size={12} style={{ display: 'inline', marginRight: 4, verticalAlign: 'middle' }} />
+                Session: {campaign}
+              </span>
+            </div>
+
+            <button
+              type="button"
+              onClick={() => {
+                setActivePortalView('COMPLETE_PAYMENT');
+                setIsMobileMenuOpen(false);
+              }}
+              className="nav-mobile-item"
+            >
+              <div className="nav-mobile-item-icon" style={{ background: '#fef3c7', color: '#d97706' }}>
+                💳
+              </div>
+              <div className="nav-mobile-item-text">
+                <div className="nav-mobile-item-title">Complete Payment</div>
+                <div className="nav-mobile-item-desc">Submit 12-digit UTR or pay pending uniform fee</div>
+              </div>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => {
+                setActivePortalView('CHECK_STATUS');
+                setIsMobileMenuOpen(false);
+              }}
+              className="nav-mobile-item"
+            >
+              <div className="nav-mobile-item-icon" style={{ background: '#dbeafe', color: '#2563eb' }}>
+                <Search size={18} />
+              </div>
+              <div className="nav-mobile-item-text">
+                <div className="nav-mobile-item-title">Check Application Status</div>
+                <div className="nav-mobile-item-desc">Track payment verification & download receipt</div>
+              </div>
+            </button>
+
+            <a
+              href="/navigation.html"
+              className="nav-mobile-item"
+              onClick={() => setIsMobileMenuOpen(false)}
+            >
+              <div className="nav-mobile-item-icon" style={{ background: '#dcfce7', color: '#16a34a' }}>
+                <Compass size={18} />
+              </div>
+              <div className="nav-mobile-item-text">
+                <div className="nav-mobile-item-title">Find the Room</div>
+                <div className="nav-mobile-item-desc">Campus indoor navigation & measurement centers</div>
+              </div>
+            </a>
+
+            <a
+              href="/schedules.html"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="nav-mobile-item"
+              onClick={() => setIsMobileMenuOpen(false)}
+            >
+              <div className="nav-mobile-item-icon" style={{ background: '#f1f5f9', color: '#475569' }}>
+                <Calendar size={18} />
+              </div>
+              <div className="nav-mobile-item-text">
+                <div className="nav-mobile-item-title">Distribution Schedules</div>
+                <div className="nav-mobile-item-desc">Dates & collection slots by branch & section</div>
+              </div>
+            </a>
+          </div>
+        )}
       </nav>
 
       {activePortalView === 'CHECK_STATUS' ? (
