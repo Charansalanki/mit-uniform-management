@@ -6,6 +6,7 @@
   "description": "Maharaja Institute of Technology Mysore - Uniform Management System",
   "scripts": {
     "dev": "concurrently \"npm run dev --prefix server\" \"npm run dev --prefix client\"",
+    "connect": "powershell -ExecutionPolicy Bypass -File ./connect.ps1",
     "build": "npm run build --prefix client",
     "backup:db": "node database/backups/backup_database.js",
     "health:check": "node infrastructure/scripts/health_check.mjs",

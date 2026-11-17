@@ -1,0 +1,298 @@
+﻿<#
+.SYNOPSIS
+    MIT Mysore Uniform Management System — Unified Frontend & Backend Connection Tool
+
+.DESCRIPTION
+    Connects, configures, and launches the Frontend portals (Student, Admin, Vendor)
+    and the Backend API (Express + SQLite Node 24).
+    Supports both Local Development and Live Cloud (Render + Vercel) connections.
+
+.PARAMETER Mode
+    'Local'  : Starts backend on :4000 and frontend on :5173, verifies connection, opens browser.
+    'Render' : Links Vercel frontends and local .env to your live Render backend URL.
+    'Test'   : Runs diagnostic health checks on both backend and database.
+
+.PARAMETER BackendUrl
+    The URL of the backend (e.g. https://mit-uniform-backend.onrender.com or http://localhost:4000).
+
+.EXAMPLE
+    .\connect.ps1
+    .\connect.ps1 -Mode Local
+    .\connect.ps1 -Mode Render -BackendUrl "https://mit-uniform-backend.onrender.com"
+#>
+
+[CmdletBinding()]
+param(
+    [ValidateSet('Local', 'Render', 'Test', 'Interactive')]
+    [string]$Mode = 'Interactive',
+
+    [string]$BackendUrl = ''
+)
+
+$ErrorActionPreference = 'Continue'
+$RootPath = $PSScriptRoot
+if (-not $RootPath) { $RootPath = (Get-Location).Path }
+
+function Show-Header {
+    Clear-Host
+    Write-Host ""
+    Write-Host " ======================================================================" -ForegroundColor Cyan
+    Write-Host "   MAHARAJA INSTITUTE OF TECHNOLOGY MYSORE" -ForegroundColor Yellow
+    Write-Host "   Uniform Management System — Frontend & Backend Connection Utility" -ForegroundColor White
+    Write-Host " ======================================================================" -ForegroundColor Cyan
+    Write-Host ""
+}
+
+function Test-PortOccupied([int]$port) {
+    try {
+        $conn = Get-NetTCPConnection -LocalPort $port -ErrorAction SilentlyContinue
+        return ($null -ne $conn)
+    } catch {
+        return $false
+    }
+}
+
+function Stop-PortProcess([int]$port) {
+    try {
+        $conns = Get-NetTCPConnection -LocalPort $port -ErrorAction SilentlyContinue
+        if ($conns) {
+            $pids = $conns | Select-Object -ExpandProperty OwningProcess -Unique
+            foreach ($p in $pids) {
+                if ($p -gt 4) {
+                    Write-Host "   [i] Freeing port $port (stopping process PID $p)..." -ForegroundColor Yellow
+                    Stop-Process -Id $p -Force -ErrorAction SilentlyContinue
+                }
+            }
+            Start-Sleep -Milliseconds 600
+        }
+    } catch {}
+}
+
+function Test-BackendHealth([string]$baseUrl, [int]$timeoutSec = 5) {
+    $clean = $baseUrl.TrimEnd('/')
+    $targetUrl = "$clean/api/health"
+    try {
+        $response = Invoke-RestMethod -Uri $targetUrl -Method Get -TimeoutSec $timeoutSec -ErrorAction Stop
+        if ($response.ok -eq $true -or $response.alive -eq $true) {
+            return @{ Success = $true; Message = "Online & Database Healthy (Engine: $($response.engine))"; Data = $response }
+        }
+        return @{ Success = $true; Message = "Responded 200 OK"; Data = $response }
+    } catch {
+        return @{ Success = $false; Message = $_.Exception.Message }
+    }
+}
+
+function Connect-RenderBackend([string]$url) {
+    Write-Host "`n [1/4] Validating Render Backend Connectivity..." -ForegroundColor Cyan
+    Write-Host "       Target URL: $url" -ForegroundColor White
+
+    $cleanUrl = $url.TrimEnd('/')
+    $health = Test-BackendHealth -baseUrl $cleanUrl -timeoutSec 15
+
+    if ($health.Success) {
+        Write-Host "   [✓] SUCCESS: Render backend is online & healthy!" -ForegroundColor Green
+        Write-Host "       $($health.Message)" -ForegroundColor Gray
+    } else {
+        Write-Host "   [!] WARNING: Could not immediately connect to $cleanUrl" -ForegroundColor Yellow
+        Write-Host "       Error: $($health.Message)" -ForegroundColor Red
+        Write-Host "       Note: Render free instances spin down when inactive. Waking it up..." -ForegroundColor Yellow
+        
+        $retryCount = 0
+        $maxRetries = 6
+        while ($retryCount -lt $maxRetries) {
+            $retryCount++
+            Write-Host "       Waiting for Render instance to boot (attempt $retryCount/$maxRetries)..." -ForegroundColor Gray
+            Start-Sleep -Seconds 5
+            $health = Test-BackendHealth -baseUrl $cleanUrl -timeoutSec 10
+            if ($health.Success) {
+                Write-Host "   [✓] SUCCESS: Render backend is now awake & healthy!" -ForegroundColor Green
+                break
+            }
+        }
+    }
+
+    Write-Host "`n [2/4] Updating Frontend Environment Files..." -ForegroundColor Cyan
+    $envTargets = @(
+        "$RootPath\apps\student-portal\.env",
+        "$RootPath\apps\student-portal\.env.production",
+        "$RootPath\apps\admin-portal\.env",
+        "$RootPath\apps\admin-portal\.env.production",
+        "$RootPath\apps\vendor-portal\.env",
+        "$RootPath\apps\vendor-portal\.env.production",
+        "$RootPath\client\.env",
+        "$RootPath\client\.env.production"
+    )
+
+    $envContent = @"
+# Auto-generated by connect.ps1
+VITE_API_URL=$cleanUrl
+"@
+
+    foreach ($file in $envTargets) {
+        $dir = Split-Path -Parent $file
+        if (-not (Test-Path $dir)) { New-Item -ItemType Directory -Force -Path $dir | Out-Null }
+        Set-Content -Path $file -Value $envContent -Force
+        Write-Host "   [+] Wrote VITE_API_URL to: $([System.IO.Path]::GetRelativePath($RootPath, $file))" -ForegroundColor Gray
+    }
+
+    Write-Host "`n [3/4] Updating Vercel Rewrite Rules..." -ForegroundColor Cyan
+    $vercelFiles = @(
+        "$RootPath\apps\student-portal\vercel.json",
+        "$RootPath\apps\admin-portal\vercel.json",
+        "$RootPath\apps\vendor-portal\vercel.json"
+    )
+
+    foreach ($vFile in $vercelFiles) {
+        if (Test-Path $vFile) {
+            $content = Get-Content -Path $vFile -Raw
+            # Replace old or placeholder api destinations with the actual live Render backend
+            $newContent = [regex]::Replace($content, 'https://[^/]+/api/:path\*', "$cleanUrl/api/:path*")
+            $newContent = [regex]::Replace($newContent, 'https://[^/]+/uploads/:path\*', "$cleanUrl/uploads/:path*")
+            Set-Content -Path $vFile -Value $newContent -Force
+            Write-Host "   [✓] Updated rewrites in: $([System.IO.Path]::GetRelativePath($RootPath, $vFile))" -ForegroundColor Gray
+        }
+    }
+
+    Write-Host "`n [4/4] Connection Configuration Summary" -ForegroundColor Green
+    Write-Host " ======================================================================" -ForegroundColor Green
+    Write-Host "   Render Backend URL : $cleanUrl" -ForegroundColor White
+    Write-Host "   Health Endpoint    : $cleanUrl/api/health" -ForegroundColor White
+    Write-Host "   All frontends now route API requests to your live Render backend." -ForegroundColor White
+    Write-Host " ======================================================================" -ForegroundColor Green
+    Write-Host ""
+    
+    $autoPush = Read-Host " Do you want to commit & push these connection settings to GitHub now? (Y/N)"
+    if ($autoPush -eq 'Y' -or $autoPush -eq 'y') {
+        Write-Host "`n Committing and pushing to origin/main..." -ForegroundColor Cyan
+        git add apps/ client/
+        git commit -m "chore(config): link frontends to live Render backend ($cleanUrl)"
+        git push origin main
+        Write-Host "   [✓] Pushed to GitHub! Vercel will now automatically deploy the connected apps." -ForegroundColor Green
+    }
+}
+
+function Start-LocalSystem {
+    Write-Host "`n [1/5] Checking Required Ports (:4000 Backend, :5173 Frontend)..." -ForegroundColor Cyan
+    Stop-PortProcess -port 4000
+    Stop-PortProcess -port 5173
+
+    Write-Host "`n [2/5] Setting Local Connection Environment..." -ForegroundColor Cyan
+    $envTargets = @(
+        "$RootPath\apps\student-portal\.env",
+        "$RootPath\apps\admin-portal\.env",
+        "$RootPath\client\.env"
+    )
+    foreach ($file in $envTargets) {
+        $dir = Split-Path -Parent $file
+        if (-not (Test-Path $dir)) { New-Item -ItemType Directory -Force -Path $dir | Out-Null }
+        Set-Content -Path $file -Value "VITE_API_URL=http://localhost:4000" -Force
+    }
+    Write-Host "   [✓] Local VITE_API_URL set to http://localhost:4000" -ForegroundColor Gray
+
+    Write-Host "`n [3/5] Starting Backend API Server (Node 24 + SQLite WAL)..." -ForegroundColor Cyan
+    $backendProcess = Start-Process -FilePath "node" -ArgumentList "server/index.js" -WorkingDirectory $RootPath -PassThru -WindowStyle Hidden
+
+    Write-Host "       Waiting for backend to report healthy on port 4000..." -ForegroundColor Gray
+    $ready = $false
+    for ($i = 1; $i -le 15; $i++) {
+        Start-Sleep -Milliseconds 600
+        $check = Test-BackendHealth -baseUrl "http://localhost:4000" -timeoutSec 2
+        if ($check.Success) {
+            $ready = $true
+            Write-Host "   [✓] Backend is ONLINE! ($($check.Message))" -ForegroundColor Green
+            break
+        }
+    }
+
+    if (-not $ready) {
+        Write-Host "   [x] Backend failed to report healthy on :4000 within 10 seconds." -ForegroundColor Red
+        if ($backendProcess) { Stop-Process -Id $backendProcess.Id -Force -ErrorAction SilentlyContinue }
+        return
+    }
+
+    Write-Host "`n [4/5] Starting Frontend Portal Server (Vite Client)..." -ForegroundColor Cyan
+    $frontendCmd = "cd '$RootPath/client'; npm run dev"
+    Start-Process -FilePath "powershell.exe" -ArgumentList "-NoExit", "-Command", $frontendCmd -WorkingDirectory "$RootPath/client"
+
+    Start-Sleep -Seconds 2
+
+    Write-Host "`n [5/5] Launching Browser Portals..." -ForegroundColor Cyan
+    Start-Process "http://localhost:5173"
+    Start-Sleep -Milliseconds 500
+    Start-Process "http://localhost:5173/admin.html"
+
+    Write-Host ""
+    Write-Host " ======================================================================" -ForegroundColor Green
+    Write-Host "   SYSTEM SUCCESSFULLY CONNECTED & RUNNING LOCALLY!" -ForegroundColor Green
+    Write-Host " ======================================================================" -ForegroundColor Green
+    Write-Host "   - Backend API      : http://localhost:4000" -ForegroundColor White
+    Write-Host "   - Health Check     : http://localhost:4000/api/health" -ForegroundColor White
+    Write-Host "   - Student Portal   : http://localhost:5173" -ForegroundColor White
+    Write-Host "   - Admin Portal     : http://localhost:5173/admin.html" -ForegroundColor White
+    Write-Host "   - Vendor Portal    : http://localhost:5173/vendor-portal.html" -ForegroundColor White
+    Write-Host " ======================================================================" -ForegroundColor Green
+    Write-Host "   To stop the backend, run: Stop-Process -Id $($backendProcess.Id) -Force" -ForegroundColor Gray
+    Write-Host ""
+}
+
+function Run-Diagnostics([string]$targetUrl) {
+    if (-not $targetUrl) {
+        $targetUrl = "http://localhost:4000"
+    }
+    Write-Host "`n Running Diagnostics on: $targetUrl" -ForegroundColor Cyan
+    Write-Host " ----------------------------------------------------------------------" -ForegroundColor Gray
+
+    $health = Test-BackendHealth -baseUrl $targetUrl -timeoutSec 8
+    if ($health.Success) {
+        Write-Host "   [✓] Health Endpoint (/api/health) : PASS" -ForegroundColor Green
+        Write-Host "   [✓] Details                       : $($health.Message)" -ForegroundColor Green
+    } else {
+        Write-Host "   [x] Health Endpoint (/api/health) : FAIL" -ForegroundColor Red
+        Write-Host "   [!] Error                         : $($health.Message)" -ForegroundColor Red
+    }
+
+    try {
+        $camp = Invoke-RestMethod -Uri "$($targetUrl.TrimEnd('/'))/api/campaign" -Method Get -TimeoutSec 5 -ErrorAction Stop
+        Write-Host "   [✓] Campaign Endpoint (/api/campaign) : PASS (Active: $($camp.name))" -ForegroundColor Green
+    } catch {
+        Write-Host "   [!] Campaign Endpoint (/api/campaign) : $($_.Exception.Message)" -ForegroundColor Yellow
+    }
+
+    Write-Host " ----------------------------------------------------------------------" -ForegroundColor Gray
+}
+
+# --- Execution Entry Point ---
+Show-Header
+
+if ($Mode -eq 'Interactive') {
+    Write-Host " Please choose an action:" -ForegroundColor Yellow
+    Write-Host "   [1] Connect & Start Local Development (Backend :4000 + Frontend :5173)" -ForegroundColor White
+    Write-Host "   [2] Connect Frontends to Live Render Backend (Update Vercel & .env files)" -ForegroundColor White
+    Write-Host "   [3] Test Connection & Run Diagnostics" -ForegroundColor White
+    Write-Host "   [4] Exit" -ForegroundColor White
+    Write-Host ""
+    $choice = Read-Host " Enter choice (1-4)"
+
+    switch ($choice) {
+        '1' { Start-LocalSystem }
+        '2' {
+            $inputUrl = Read-Host " Enter your Render Backend URL (e.g. https://mit-uniform-backend.onrender.com)"
+            if ($inputUrl) { Connect-RenderBackend -url $inputUrl }
+            else { Write-Host " [!] No URL provided. Aborted." -ForegroundColor Red }
+        }
+        '3' {
+            $inputUrl = Read-Host " Enter Backend URL to test (press Enter for http://localhost:4000)"
+            Run-Diagnostics -targetUrl $inputUrl
+        }
+        default { Write-Host " Exiting." -ForegroundColor Gray }
+    }
+} elseif ($Mode -eq 'Local') {
+    Start-LocalSystem
+} elseif ($Mode -eq 'Render') {
+    if (-not $BackendUrl) {
+        $BackendUrl = Read-Host " Enter your Render Backend URL"
+    }
+    Connect-RenderBackend -url $BackendUrl
+} elseif ($Mode -eq 'Test') {
+    Run-Diagnostics -targetUrl $BackendUrl
+}
