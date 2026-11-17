@@ -1,8 +1,8 @@
 import { useState, useEffect, useMemo } from 'react';
-import { DistributionSchedule } from './types';
-import { DEPARTMENTS, SEMESTERS, parseCampaignYears, formatAcademicYear } from './mockData';
-import { api } from './api';
-import { MIT_SEAL_LOGO_BASE64 } from './utils/mitLogoBase64';
+import { DistributionSchedule } from '../types';
+import { DEPARTMENTS, SEMESTERS, parseCampaignYears, formatAcademicYear } from '../mockData';
+import { api } from '../api';
+import { MIT_SEAL_LOGO_BASE64 } from '../utils/mitLogoBase64';
 import {
   CalendarDays,
   Clock,

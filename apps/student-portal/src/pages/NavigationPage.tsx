@@ -14,10 +14,10 @@ import {
   Sparkles,
   Info
 } from 'lucide-react';
-import locoromRoomsData from './locoromData.json';
-import { api } from './api';
-import { parseCampaignYears } from './mockData';
-import { MIT_SEAL_LOGO_BASE64 } from './utils/mitLogoBase64';
+import locoromRoomsData from '../locoromData.json';
+import { api } from '../api';
+import { parseCampaignYears } from '../mockData';
+import { MIT_SEAL_LOGO_BASE64 } from '../utils/mitLogoBase64';
 
 export interface LocoromPhoto {
   name: string;
