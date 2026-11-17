@@ -1,4 +1,5 @@
 import { useEffect, useRef } from 'react';
+import { API_BASE_URL } from '../utils/apiConfig';
 
 interface UseRealtimeSystemSyncProps {
   apiBaseUrl?: string;
@@ -127,7 +128,8 @@ export function useRealtimeSystemSync({
 
     const urlPrefix =
       apiBaseUrl ||
-      (typeof window !== 'undefined' && window.location.port === '5173'
+      API_BASE_URL ||
+      (typeof window !== 'undefined' && (window.location.port === '5173' || window.location.port === '5174')
         ? 'http://localhost:4000'
         : '');
 

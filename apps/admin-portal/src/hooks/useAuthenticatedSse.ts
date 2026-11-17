@@ -1,4 +1,5 @@
 import { useEffect, useRef } from 'react';
+import { API_BASE_URL } from '../utils/apiConfig';
 
 export interface UseAuthenticatedSseOptions {
   streamPath: string | null;        // e.g. '/api/sse/admin', '/api/sse/vendor', `/api/sse/student/${registrationId}`
@@ -39,7 +40,8 @@ export function useAuthenticatedSse({
     // Direct port 4000 connection in dev prevents Vite HTTP proxy socket starvation
     const effectiveBaseUrl =
       apiBaseUrl ||
-      (typeof window !== 'undefined' && window.location.port === '5173'
+      API_BASE_URL ||
+      (typeof window !== 'undefined' && (window.location.port === '5173' || window.location.port === '5174')
         ? 'http://localhost:4000'
         : '');
 

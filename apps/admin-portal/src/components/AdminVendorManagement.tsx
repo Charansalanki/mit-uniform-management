@@ -2586,8 +2586,8 @@ export function AdminVendorManagement({
                           alt={slot.title}
                           onError={(e) => {
                             const target = e.currentTarget;
-                            if (qrUrl && !target.src.includes(':4000')) {
-                              target.src = `http://localhost:4000${qrUrl}`;
+                            if (qrUrl && apiBaseUrl && !target.src.startsWith(apiBaseUrl)) {
+                              target.src = `${apiBaseUrl}${qrUrl}`;
                             }
                           }}
                           style={{ width: '150px', height: '180px', objectFit: 'contain', background: '#fff', padding: '6px', borderRadius: '8px', border: '1px solid #e2e8f0', boxShadow: '0 2px 6px rgba(0,0,0,0.05)' }}
@@ -4042,8 +4042,8 @@ export function AdminVendorManagement({
                 alt={vendorPreviewQrModal.provider}
                 onError={(e) => {
                   const target = e.currentTarget;
-                  if (vendorPreviewQrModal.qrImageUrl && !target.src.includes(':4000')) {
-                    target.src = `http://localhost:4000${vendorPreviewQrModal.qrImageUrl}`;
+                  if (vendorPreviewQrModal.qrImageUrl && apiBaseUrl && !target.src.startsWith(apiBaseUrl)) {
+                    target.src = `${apiBaseUrl}${vendorPreviewQrModal.qrImageUrl}`;
                   }
                 }}
                 style={{ width: '220px', height: '220px', objectFit: 'contain', background: '#ffffff', padding: '8px', borderRadius: '10px', border: '1px solid #cbd5e1' }}

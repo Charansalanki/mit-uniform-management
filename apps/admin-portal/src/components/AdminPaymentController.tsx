@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useAuthenticatedSse } from '../hooks/useAuthenticatedSse';
+import { API_BASE_URL } from '../utils/apiConfig';
 import { DEPARTMENTS } from '../mockData';
 import {
   PaymentConfig,
@@ -946,13 +947,13 @@ export function AdminPaymentController({
               </div>
               {inspectModal.paymentScreenshot ? (
                 <a
-                  href={inspectModal.paymentScreenshot.startsWith('http') ? inspectModal.paymentScreenshot : `http://localhost:4000${inspectModal.paymentScreenshot}`}
+                  href={inspectModal.paymentScreenshot.startsWith('http') ? inspectModal.paymentScreenshot : `${API_BASE_URL || ''}${inspectModal.paymentScreenshot}`}
                   target="_blank"
                   rel="noreferrer"
                   style={{ width: '100%', display: 'flex', justifyContent: 'center' }}
                 >
                   <img
-                    src={inspectModal.paymentScreenshot.startsWith('http') ? inspectModal.paymentScreenshot : `http://localhost:4000${inspectModal.paymentScreenshot}`}
+                    src={inspectModal.paymentScreenshot.startsWith('http') ? inspectModal.paymentScreenshot : `${API_BASE_URL || ''}${inspectModal.paymentScreenshot}`}
                     alt="Student Payment Screenshot"
                     style={{ maxHeight: '340px', maxWidth: '100%', objectFit: 'contain', borderRadius: '8px', border: '1px solid #cbd5e1', background: '#ffffff', padding: '4px' }}
                   />

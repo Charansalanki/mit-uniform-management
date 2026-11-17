@@ -12,8 +12,9 @@ import {
   PaymentStats,
   PaymentAuditLog
 } from './types';
+import { API_BASE_URL } from './utils/apiConfig';
 
-const API_BASE = '/api';
+const API_BASE = API_BASE_URL ? `${API_BASE_URL}/api` : '/api';
 const TOKEN_KEY = 'mit_uniform_admin_token_v1';
 
 export function getAuthToken(): string | null {
