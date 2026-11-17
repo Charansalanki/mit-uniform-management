@@ -1,4 +1,4 @@
-﻿<#
+<#
 .SYNOPSIS
     MIT Mysore Uniform Management System — Unified Frontend & Backend Connection Tool
 

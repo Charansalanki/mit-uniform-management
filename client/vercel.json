@@ -3,20 +3,44 @@
   "cleanUrls": true,
   "rewrites": [
     {
-      "source": "/vendor/:path*",
-      "destination": "/vendor-portal.html"
+      "source": "/admin",
+      "destination": "/admin.html"
+    },
+    {
+      "source": "/admin.html",
+      "destination": "/admin.html"
     },
     {
       "source": "/vendor",
       "destination": "/vendor-portal.html"
     },
     {
-      "source": "/admin",
-      "destination": "/admin.html"
+      "source": "/vendor-portal",
+      "destination": "/vendor-portal.html"
+    },
+    {
+      "source": "/vendor-portal.html",
+      "destination": "/vendor-portal.html"
+    },
+    {
+      "source": "/vendor/:path*",
+      "destination": "/vendor-portal.html"
     },
     {
       "source": "/schedules",
       "destination": "/schedules.html"
+    },
+    {
+      "source": "/schedules.html",
+      "destination": "/schedules.html"
+    },
+    {
+      "source": "/navigation",
+      "destination": "/navigation.html"
+    },
+    {
+      "source": "/navigation.html",
+      "destination": "/navigation.html"
     },
     {
       "source": "/",
@@ -27,6 +51,20 @@
         }
       ],
       "destination": "/admin.html"
+    },
+    {
+      "source": "/",
+      "has": [
+        {
+          "type": "host",
+          "value": "(.*vendor.*)"
+        }
+      ],
+      "destination": "/vendor-portal.html"
+    },
+    {
+      "source": "/(.*)",
+      "destination": "/index.html"
     }
   ],
   "headers": [

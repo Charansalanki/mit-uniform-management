@@ -1,15 +1,83 @@
 {
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "cleanUrls": true,
+  "buildCommand": "cd client && npm install && npm run build",
+  "outputDirectory": "client/dist",
   "rewrites": [
-    { "source": "/api/(.*)", "destination": "/api/index.js" },
-    { "source": "/(.*)", "destination": "/index.html" }
+    {
+      "source": "/admin",
+      "destination": "/admin.html"
+    },
+    {
+      "source": "/admin.html",
+      "destination": "/admin.html"
+    },
+    {
+      "source": "/vendor",
+      "destination": "/vendor-portal.html"
+    },
+    {
+      "source": "/vendor-portal",
+      "destination": "/vendor-portal.html"
+    },
+    {
+      "source": "/vendor-portal.html",
+      "destination": "/vendor-portal.html"
+    },
+    {
+      "source": "/vendor/:path*",
+      "destination": "/vendor-portal.html"
+    },
+    {
+      "source": "/schedules",
+      "destination": "/schedules.html"
+    },
+    {
+      "source": "/schedules.html",
+      "destination": "/schedules.html"
+    },
+    {
+      "source": "/navigation",
+      "destination": "/navigation.html"
+    },
+    {
+      "source": "/navigation.html",
+      "destination": "/navigation.html"
+    },
+    {
+      "source": "/",
+      "has": [
+        {
+          "type": "host",
+          "value": "(.*admin.*)"
+        }
+      ],
+      "destination": "/admin.html"
+    },
+    {
+      "source": "/",
+      "has": [
+        {
+          "type": "host",
+          "value": "(.*vendor.*)"
+        }
+      ],
+      "destination": "/vendor-portal.html"
+    },
+    {
+      "source": "/(.*)",
+      "destination": "/index.html"
+    }
   ],
   "headers": [
     {
-      "source": "/api/tracking/(.*)",
+      "source": "/assets/(.*)",
       "headers": [
-        { "key": "Cache-Control", "value": "no-store, no-cache, must-revalidate, proxy-revalidate" }
+        {
+          "key": "Cache-Control",
+          "value": "public, max-age=31536000, immutable"
+        }
       ]
     }
   ]
 }
-
