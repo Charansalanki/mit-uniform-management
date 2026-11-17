@@ -1,62 +1,15 @@
 {
-  "$schema": "https://openapi.vercel.sh/vercel.json",
-  "services": {
-    "student-portal": {
-      "root": "apps/student-portal",
-      "framework": "vite"
-    },
-    "admin-portal": {
-      "root": "apps/admin-portal",
-      "framework": "vite"
-    },
-    "mit-uniform-backend": {
-      "root": "server",
-      "framework": "express",
-      "buildCommand": "npm install --omit=dev"
-    }
-  },
   "rewrites": [
+    { "source": "/api/(.*)", "destination": "/api/index.js" },
+    { "source": "/(.*)", "destination": "/index.html" }
+  ],
+  "headers": [
     {
-      "source": "/api/(.*)",
-      "destination": {
-        "service": "mit-uniform-backend"
-      }
-    },
-    {
-      "source": "/uploads/(.*)",
-      "destination": {
-        "service": "mit-uniform-backend"
-      }
-    },
-    {
-      "source": "/admin",
-      "destination": {
-        "service": "admin-portal"
-      }
-    },
-    {
-      "source": "/admin/(.*)",
-      "destination": {
-        "service": "admin-portal"
-      }
-    },
-    {
-      "source": "/vendor",
-      "destination": {
-        "service": "admin-portal"
-      }
-    },
-    {
-      "source": "/vendor/(.*)",
-      "destination": {
-        "service": "admin-portal"
-      }
-    },
-    {
-      "source": "/(.*)",
-      "destination": {
-        "service": "student-portal"
-      }
+      "source": "/api/tracking/(.*)",
+      "headers": [
+        { "key": "Cache-Control", "value": "no-store, no-cache, must-revalidate, proxy-revalidate" }
+      ]
     }
   ]
 }
+

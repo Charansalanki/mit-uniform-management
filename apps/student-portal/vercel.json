@@ -1,9 +1,19 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "cleanUrls": true,
-  "buildCommand": "vite build",
-  "outputDirectory": "dist",
   "rewrites": [
+    {
+      "source": "/api/:path*",
+      "destination": "https://api.uniforms.mitmysore.in/api/:path*"
+    },
+    {
+      "source": "/uploads/:path*",
+      "destination": "https://api.uniforms.mitmysore.in/uploads/:path*"
+    },
+    {
+      "source": "/schedules",
+      "destination": "/index.html"
+    },
     {
       "source": "/(.*)",
       "destination": "/index.html"
