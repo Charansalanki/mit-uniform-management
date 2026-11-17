@@ -34,6 +34,7 @@ import AdminAccountSettings from './components/admin/AdminAccountSettings';
 import AdminApplicationController from './components/admin/AdminApplicationController';
 import { AdminPaymentController, PaymentControllerTab } from './components/AdminPaymentController';
 import { AdminVendorManagement } from './components/AdminVendorManagement';
+import VendorPortalPage from './pages/VendorPortalPage';
 import { MIT_SEAL_LOGO_BASE64 } from './utils/mitLogoBase64';
 import { useRealtimeSystemSync } from './hooks/useRealtimeSystemSync';
 
@@ -52,7 +53,15 @@ export interface AppProps {
 }
 
 export default function App({ adminProfile, onLogout }: AppProps = {}) {
-  const [page, setPage] = useState<string>('Dashboard');
+  const [page, setPage] = useState<string>(() => {
+    if (typeof window !== 'undefined') {
+      const path = window.location.pathname.toLowerCase();
+      if (path.includes('/vendor') || window.location.search.includes('vendor')) {
+        return 'Vendor Portal';
+      }
+    }
+    return 'Dashboard';
+  });
   const [sidebarOpen, setSidebarOpen] = useState<boolean>(false);
   const [paymentTab, setPaymentTab] = useState<PaymentControllerTab>('VENDOR_MANAGEMENT');
   const [paymentExpanded, setPaymentExpanded] = useState<boolean>(true);
@@ -232,6 +241,7 @@ export default function App({ adminProfile, onLogout }: AppProps = {}) {
     { name: 'Distribution Schedule', icon: CalendarDays },
     { name: 'PAYMENT CONTROLLER', icon: CreditCard },
     { name: 'Application Controller', icon: Power },
+    { name: 'Vendor Portal', icon: Store },
     { name: 'Settings', icon: Settings }
   ];
 
@@ -564,6 +574,12 @@ export default function App({ adminProfile, onLogout }: AppProps = {}) {
           {page === 'Application Controller' && (
             <div className="space-y-6">
               <AdminApplicationController />
+            </div>
+          )}
+
+          {page === 'Vendor Portal' && (
+            <div className="space-y-6">
+              <VendorPortalPage />
             </div>
           )}
 
